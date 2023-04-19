@@ -3,14 +3,11 @@ package com.xiaomi.hera.trace.etl.es.util.bloomfilter;
 import com.google.common.hash.BloomFilter;
 import com.google.common.hash.Funnel;
 import com.google.common.hash.Funnels;
-import com.google.common.hash.HashCode;
-import com.google.common.hash.Hashing;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -19,7 +16,7 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
-public class TraceIdRedisBloomUtil extends BaseTraceIdRedisBloomUtil{
+public class BaseTraceIdRedisBloomUtil {
 
     private String localUpdateTime = "04:00:00";
     private String localUpdateTimeMiddle = "12:00:00";
@@ -42,7 +39,7 @@ public class TraceIdRedisBloomUtil extends BaseTraceIdRedisBloomUtil{
         updateLocalBloomTimerMiddle();
     }
 
-    public boolean isExistLocal(String traceId) {
+    public abstract boolean isExistLocal(String traceId) {
         try {
             return localBloomFilter.mightContain(traceId);
         } catch (Exception e) {
@@ -52,7 +49,7 @@ public class TraceIdRedisBloomUtil extends BaseTraceIdRedisBloomUtil{
     }
 
     public synchronized void addBatch(String traceId) {
-        TraceIdRedisBloomUtil.localBloomFilter.put(traceId);
+        BaseTraceIdRedisBloomUtil.localBloomFilter.put(traceId);
     }
 
     private void updateLocalBloomTimer() {

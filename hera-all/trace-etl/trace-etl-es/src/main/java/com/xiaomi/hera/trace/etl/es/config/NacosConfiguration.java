@@ -7,6 +7,6 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 @EnableNacosConfig(globalProperties = @NacosProperties(serverAddr = "${nacos.address}"))
-@NacosPropertySource(dataId = "hera_trace_config", autoRefreshed = true)
+@NacosPropertySource(dataId = "${nacos.data.id.name}", autoRefreshed = true)
 public class NacosConfiguration {
 }
