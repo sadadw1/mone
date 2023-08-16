@@ -39,6 +39,7 @@ public class TestController {
                     sendGETReuqest("http://localhost:8085/remotehealth2");
                     sendGETReuqest("http://localhost:8085/testError");
                     sendGETReuqest("http://localhost:8085/customizedMetrics");
+                    sendGETReuqest("http://localhost:8085/goMethod");
                 },
                 0,
                 15,
@@ -80,6 +81,11 @@ public class TestController {
     @GetMapping("/testError")
     public Object testError() {
         throw new RuntimeException("test error");
+    }
+
+    @GetMapping("/goMethod")
+    public void goMethod() {
+        sendGETReuqest("http://hera-demo-go:8080/http");
     }
 
     double[] buckets = new double[]{0.01, 0.1, 1.0, 5.0, 10.0, 20.0, 40.0, 80.0, 200.0, 300.0, 400.0, 600.0, 800.0, 1000.0,2000.0,3000.0};

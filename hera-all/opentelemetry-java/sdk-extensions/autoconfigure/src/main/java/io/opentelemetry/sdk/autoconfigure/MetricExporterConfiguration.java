@@ -170,14 +170,14 @@ final class MetricExporterConfiguration {
 //    Runtime.getRuntime().addShutdownHook(new Thread(server::stop));
 //  }
 
-  @SuppressWarnings({"BooleanParameter", "UnnecessaryParentheses"})
+  @SuppressWarnings({"BooleanParameter", "UnnecessaryParentheses", "UnusedVariable"})
   private static void configureJcommonPrometheusMetrics(ConfigProperties config) {
     // regist nacos for prometheus port
     String javaagentPrometheusPort = SystemCommon.getEnvOrProperties(EnvOrJvmProperties.ENV_JAVAAGENT_PROMETHEUS_PORT.getKey());
     if (StringUtils.isEmpty(javaagentPrometheusPort)) {
-      javaagentPrometheusPort = config.getString(EnvOrJvmProperties.JVM_OTEL_METRICS_PROMETHEUS_PORT.getKey());
+      javaagentPrometheusPort = SystemCommon.getEnvOrProperties(EnvOrJvmProperties.JVM_OTEL_METRICS_PROMETHEUS_PORT.getKey());
     }
-    String nacosAddr = config.getString(EnvOrJvmProperties.JVM_OTEL_NACOS_ADDRESS.getKey());
+    String nacosAddr = SystemCommon.getEnvOrProperties(EnvOrJvmProperties.JVM_OTEL_NACOS_ADDRESS.getKey());
     registJvmNacos(javaagentPrometheusPort, nacosAddr);
     registLogAgentNacos(nacosAddr);
 
@@ -212,6 +212,7 @@ final class MetricExporterConfiguration {
     }).start();
   }
 
+  @SuppressWarnings("SystemOut")
   private static void registJvmNacos(String prometheusPort, String nacosServerAddr) {
     try {
       String appName = "prometheus_server_" + applicationName;
@@ -239,6 +240,7 @@ final class MetricExporterConfiguration {
         }
       }));
     } catch (Exception e) {
+      e.printStackTrace();
       throw new ConfigurationException(
           "Prometheus export regist nacos exception: " + e.getMessage());
     }

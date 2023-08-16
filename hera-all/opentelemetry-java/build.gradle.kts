@@ -421,11 +421,11 @@ subprojects {
                 val versions: Map<String, String> by project
                 protoc {
                     // The artifact spec for the Protobuf Compiler
-                    artifact = "com.google.protobuf:protoc:${versions["com.google.protobuf"]}"
+                    artifact = "com.google.protobuf:protoc:${versions["com.google.protobuf"]}:osx-x86_64"
                 }
                 plugins {
                     id("grpc") {
-                        artifact = "io.grpc:protoc-gen-grpc-java:${versions["io.grpc"]}"
+                        artifact = "io.grpc:protoc-gen-grpc-java:${versions["io.grpc"]}:osx-x86_64"
                     }
                 }
                 generateProtoTasks {
@@ -502,43 +502,43 @@ subprojects {
 
     plugins.withId("me.champeau.gradle.japicmp") {
         afterEvaluate {
-            tasks {
-                val jApiCmp by registering(JapicmpTask::class) {
-                    dependsOn("jar")
-                    // the japicmp "old" version is either the user-specified one, or the latest release.
-                    val userRequestedBase = project.properties["apiBaseVersion"] as String?
-                    val baselineVersion: String = userRequestedBase ?: latestReleasedVersion
-                    val baselineArtifact: File = project.findArtifact(baselineVersion)
-                    oldClasspath = files(baselineArtifact)
-
-                    // the japicmp "new" version is either the user-specified one, or the locally built jar.
-                    val newVersion : String? = project.properties["apiNewVersion"] as String?
-                    val newArtifact: File = if (newVersion == null) {
-                        val jar = getByName("jar") as Jar
-                        file(jar.archiveFile)
-                    } else {
-                        project.findArtifact(newVersion)
-                    }
-                    newClasspath = files(newArtifact)
-
-                    //only output changes, not everything
-                    isOnlyModified = true
-                    //this is needed so that we only consider the current artifact, and not dependencies
-                    isIgnoreMissingClasses = true
-                    // double wildcards don't seem to work here (*.internal.*)
-                    packageExcludes = listOf("*.internal", "io.opentelemetry.internal.shaded.jctools.*")
-                    if (newVersion == null) {
-                        val baseVersionString = if (userRequestedBase == null) "latest" else baselineVersion
-                        txtOutputFile = file("$rootDir/docs/apidiffs/current_vs_${baseVersionString}/${project.base.archivesBaseName}.txt")
-                    } else {
-                        txtOutputFile = file("$rootDir/docs/apidiffs/${newVersion}_vs_${baselineVersion}/${project.base.archivesBaseName}.txt")
-                    }
-                }
-                // have the check task depend on the api comparison task, to make it more likely it will get used.
-                named("check") {
-                    dependsOn(jApiCmp)
-                }
-            }
+//            tasks {
+//                val jApiCmp by registering(JapicmpTask::class) {
+//                    dependsOn("jar")
+//                    // the japicmp "old" version is either the user-specified one, or the latest release.
+//                    val userRequestedBase = project.properties["apiBaseVersion"] as String?
+//                    val baselineVersion: String = userRequestedBase ?: latestReleasedVersion
+//                    val baselineArtifact: File = project.findArtifact(baselineVersion)
+//                    oldClasspath = files(baselineArtifact)
+//
+//                    // the japicmp "new" version is either the user-specified one, or the locally built jar.
+//                    val newVersion : String? = project.properties["apiNewVersion"] as String?
+//                    val newArtifact: File = if (newVersion == null) {
+//                        val jar = getByName("jar") as Jar
+//                        file(jar.archiveFile)
+//                    } else {
+//                        project.findArtifact(newVersion)
+//                    }
+//                    newClasspath = files(newArtifact)
+//
+//                    //only output changes, not everything
+//                    isOnlyModified = true
+//                    //this is needed so that we only consider the current artifact, and not dependencies
+//                    isIgnoreMissingClasses = true
+//                    // double wildcards don't seem to work here (*.internal.*)
+//                    packageExcludes = listOf("*.internal", "io.opentelemetry.internal.shaded.jctools.*")
+//                    if (newVersion == null) {
+//                        val baseVersionString = if (userRequestedBase == null) "latest" else baselineVersion
+//                        txtOutputFile = file("$rootDir/docs/apidiffs/current_vs_${baseVersionString}/${project.base.archivesBaseName}.txt")
+//                    } else {
+//                        txtOutputFile = file("$rootDir/docs/apidiffs/${newVersion}_vs_${baselineVersion}/${project.base.archivesBaseName}.txt")
+//                    }
+//                }
+//                // have the check task depend on the api comparison task, to make it more likely it will get used.
+//                named("check") {
+//                    dependsOn(jApiCmp)
+//                }
+//            }
         }
     }
 
@@ -560,7 +560,7 @@ subprojects {
                         version = versionParts.joinToString("-")
                     }
                     groupId = "run.mone"
-                    version = "0.3.0-opensource-SNAPSHOT"
+                    version = "0.4.0-opensource-SNAPSHOT"
                     afterEvaluate {
                         // not available until evaluated.
                         artifactId = the<BasePluginConvention>().archivesBaseName

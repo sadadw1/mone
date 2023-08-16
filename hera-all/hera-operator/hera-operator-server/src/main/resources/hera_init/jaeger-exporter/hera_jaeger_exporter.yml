@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-exporter
+  namespace: hera-namespace
+  labels:
+    app: jaeger-exporter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger-exporter
+  template:
+    metadata:
+      labels:
+        app: jaeger-exporter
+    spec:
+      containers:
+      - name: jaeger-exporter-container
+        image: prod-mione-opensource-registry.cn-beijing.cr.aliyuncs.com/prod-mione-opensource/prod-mione-opensource:jaeger-exporter-v1
+        resources:
+          limits:
+            cpu: '500m'
+            memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-exporter
+  namespace: hera-namespace
+  labels:
+    app: jaeger-exporter
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app: jaeger-exporter
+  clusterIP: None

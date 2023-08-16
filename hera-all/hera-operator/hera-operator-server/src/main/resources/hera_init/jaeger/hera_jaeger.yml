@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger-all
+  namespace: hera-namespace
+  labels:
+    app: jaeger-all
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger-all
+  template:
+    metadata:
+      labels:
+        app: jaeger-all
+    spec:
+      containers:
+      - name: jaeger-all-container
+        image: prod-mione-opensource-registry.cn-beijing.cr.aliyuncs.com/prod-mione-opensource/prod-mione-opensource:jaeger-all-in-one
+        imagePullPolicy: Always
+        env:
+          - name: SPAN_STORAGE_TYPE
+            value: rocketmq
+          - name: RMQ_NS
+            value: 'http://rocketmq-name-server-service:9876'
+          - name: RMQ_GROUP
+            value: jaeger_producer
+          - name: RMQ_TOPIC
+            value: mone_hera_jaeger_exporter
+        resources:
+          limits:
+            cpu: '500m'
+            memory: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger-all
+  namespace: hera-namespace
+  labels:
+    app: jaeger-all
+spec:
+  ports:
+    - port: 4316
+      targetPort: 4316
+      protocol: TCP
+      name: otel-grpc
+    - port: 14268
+      targetPort: 14268
+      protocol: TCP
+      name: otel-http
+  selector:
+    app: jaeger-all
+  clusterIP: None
