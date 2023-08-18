@@ -47,7 +47,8 @@ public class RocketMQSerivce {
             "hera_app_ip_change",
             "hear_log_message_compensate",
             "mone_hera_staging_trace_etl_server",
-            "mone_hera_staging_trace_etl_es"};
+            "mone_hera_staging_trace_etl_es",
+            "hera_meta_data_staging"};
 
     public void createTopic(String namesrvAddr) {
         DefaultMQPushConsumer consumer = null;
