@@ -109,7 +109,7 @@ public class AgentInstaller {
         Config config = Config.get();
         if (config.getBoolean(JAVAAGENT_ENABLED_CONFIG, true)) {
             // set env or jvm properties
-            setEnvAndJvmProperties(config.getString(EnvOrJvmProperties.JVM_OTEL_NACOS_ADDRESS.getKey()));
+            setEnvAndJvmProperties(config.getString(EnvOrJvmProperties.JVM_OTEL_NACOS_ADDRESS.getKey(), "nacos.hera-namespace:80"));
 
             List<AgentListener> agentListeners = loadOrdered(AgentListener.class);
             installBytebuddyAgent(inst, agentListeners);
@@ -522,6 +522,8 @@ public class AgentInstaller {
                 }
             }
         }
+        // set env to JVM operation
+        setJvmToEnv();
         // set default values for env or properties
         setDefaultEnv();
         // set cadvisor env
@@ -533,6 +535,17 @@ public class AgentInstaller {
         }
         if (SystemCommon.getEnvOrProperties(EnvOrJvmProperties.ENV_SERVER_ENV.getKey()) == null) {
             System.setProperty(EnvOrJvmProperties.ENV_SERVER_ENV.getKey(), SystemCommon.getEnvOrProperties(EnvOrJvmProperties.ENV_MIONE_PROJECT_ENV_NAME.getKey()));
+        }
+    }
+
+    private static void setJvmToEnv() {
+        // set project env id
+        if(SystemCommon.getEnvOrProperties(EnvOrJvmProperties.ENV_MIONE_PROJECT_ENV_ID.getKey()) == null){
+            System.setProperty(EnvOrJvmProperties.ENV_MIONE_PROJECT_ENV_ID.getKey(), SystemCommon.getEnvOrProperties(EnvOrJvmProperties.JVM_OTEL_MIONE_PROJECT_ENV_ID.getKey()));
+        }
+        // set project env name
+        if(SystemCommon.getEnvOrProperties(EnvOrJvmProperties.ENV_MIONE_PROJECT_ENV_NAME.getKey()) == null){
+            System.setProperty(EnvOrJvmProperties.ENV_MIONE_PROJECT_ENV_NAME.getKey(), SystemCommon.getEnvOrProperties(EnvOrJvmProperties.JVM_OTEL_MIONE_PROJECT_ENV_NAME.getKey()));
         }
     }
 
