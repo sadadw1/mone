@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: jaeger-all-container
-        image: prod-mione-opensource-registry.cn-beijing.cr.aliyuncs.com/prod-mione-opensource/prod-mione-opensource:jaeger-all-in-one
+        image: prod-mione-opensource-registry.cn-beijing.cr.aliyuncs.com/prod-mione-opensource/prod-mione-opensource:jaeger-collector
         imagePullPolicy: Always
         env:
           - name: SPAN_STORAGE_TYPE
@@ -28,6 +28,8 @@ spec:
             value: jaeger_producer
           - name: RMQ_TOPIC
             value: mone_hera_jaeger_exporter
+          - name: COLLECTOR_OTLP_ENABLED
+            value: 'true'
         resources:
           limits:
             cpu: '500m'
@@ -42,10 +44,10 @@ metadata:
     app: jaeger-all
 spec:
   ports:
-    - port: 4316
-      targetPort: 4316
+    - port: 4317
+      targetPort: 4317
       protocol: TCP
-      name: otel-grpc
+      name: otlp-grpc
     - port: 14268
       targetPort: 14268
       protocol: TCP
