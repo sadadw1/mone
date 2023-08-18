@@ -29,7 +29,7 @@ public class HeraAppEnvIpJob {
     /**
      * 从1分钟开始后每2分钟执行一次
      */
-    @Scheduled(cron = "* 1/2 * * * ?")
+    @Scheduled(cron = "0 1/2 * * * ?")
     public void init() {
         log.info("HeraAppEnvIpJob:{},MisAppJob execute！ time:{}", jobStartFlag, LocalDateTime.now());
         heraAppEnvService.fetchIpsOpByApp(Strings.EMPTY);

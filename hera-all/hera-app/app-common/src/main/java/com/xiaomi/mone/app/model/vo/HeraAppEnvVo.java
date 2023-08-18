@@ -5,6 +5,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 import java.util.List;
 
@@ -18,6 +19,7 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString
 public class HeraAppEnvVo extends BaseCommon {
 
     private Long id;
@@ -35,6 +37,7 @@ public class HeraAppEnvVo extends BaseCommon {
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
+    @ToString
     public static class EnvVo {
         private Long envId;
 
