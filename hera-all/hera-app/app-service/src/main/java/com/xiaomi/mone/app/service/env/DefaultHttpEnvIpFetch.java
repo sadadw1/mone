@@ -45,15 +45,29 @@ public class DefaultHttpEnvIpFetch implements EnvIpFetch {
         String url = operatorEnvUrl + HERA_OPERATOR_ENV_URL;
         log.info("fetch url : "+url+"; appName : "+appName);
         Request request = new Request.Builder().url(url).post(requestBody).build();
-        Response response = okHttpClient.newCall(request).execute();
-        log.info("fetch response : "+ response.isSuccessful());
-        if (response.isSuccessful()) {
-            String rstJson = response.body().string();
-            log.info("fetch response body: "+ rstJson);
-            Result<List<String>> listResult = gson.fromJson(rstJson, new TypeToken<Result<List<String>>>() {
-            }.getType());
-            //TODO 环境信息后边搞，现在统一走默认环境
-            return gererateHeraAppEnvVo(appBaseId, appId, appName, listResult.getData());
+        Response response = null;
+        ResponseBody body = null;
+        try {
+            response = okHttpClient.newCall(request).execute();
+            log.info("fetch response : " + response.isSuccessful());
+            if (response.isSuccessful()) {
+                body = response.body();
+                String rstJson = body.string();
+                log.info("fetch response body: " + rstJson);
+                Result<List<String>> listResult = gson.fromJson(rstJson, new TypeToken<Result<List<String>>>() {
+                }.getType());
+                //TODO 环境信息后边搞，现在统一走默认环境
+                return gererateHeraAppEnvVo(appBaseId, appId, appName, listResult.getData());
+            }
+        }catch (Exception e){
+            log.error("fetch iplist from operator error : ",e);
+        }finally {
+            if(response != null){
+                response.close();
+            }
+            if(body != null){
+                body.close();
+            }
         }
         return null;
     }

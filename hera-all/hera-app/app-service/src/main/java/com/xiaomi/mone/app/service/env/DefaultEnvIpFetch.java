@@ -2,20 +2,24 @@ package com.xiaomi.mone.app.service.env;
 
 import com.alibaba.nacos.api.config.annotation.NacosValue;
 import com.google.gson.Gson;
+import com.google.gson.JsonObject;
 import com.google.gson.reflect.TypeToken;
 import com.xiaomi.mone.app.common.Result;
 import com.xiaomi.mone.app.common.TpcLabelRes;
 import com.xiaomi.mone.app.common.TpcPageRes;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.FormBody;
+import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
+import okhttp3.RequestBody;
 import okhttp3.Response;
+import okhttp3.ResponseBody;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
+import java.util.List;
 import java.util.Objects;
 
 import static com.xiaomi.mone.app.common.Constant.DEFAULT_REGISTER_REMOTE_TYPE;
@@ -66,27 +70,48 @@ public class DefaultEnvIpFetch {
     }
 
     private EnvIpFetch getEnvFetchFromRemote(String appId) {
+        String url = heraTpcUrl + HERA_TPC_APP_DETAIL_URL;
+        MediaType mediaType = MediaType.parse("application/json; charset=utf-8");
+        JsonObject jsonObject = new JsonObject();
+        jsonObject.addProperty("parentId", appId);
+        jsonObject.addProperty("flagKey", DEFAULT_REGISTER_REMOTE_TYPE);
+        RequestBody requestBody = RequestBody.create(mediaType, gson.toJson(jsonObject));
         Request request = new Request.Builder()
-                .url(heraTpcUrl + HERA_TPC_APP_DETAIL_URL)
-                .post(new FormBody.Builder().add("parentId", appId)
-                        .add("flagKey", DEFAULT_REGISTER_REMOTE_TYPE).build())
+                .url(url)
+                .post(requestBody)
                 .build();
+        Response response = null;
+        ResponseBody body = null;
         try {
-            Response response = okHttpClient.newCall(request).execute();
-            log.info("appId : "+appId+" get mi-tpc response is success: "+response.isSuccessful());
+            response = okHttpClient.newCall(request).execute();
+            log.info("url is : "+url+" appId : "+appId+" get mi-tpc response is success: "+response.isSuccessful() + "response : "+response.toString());
             if (response.isSuccessful()) {
-                String rstJson = response.body().string();
+                body = response.body();
+                String rstJson = body.string();
                 log.info("appId : "+appId+" get mi-tpc response : "+rstJson);
                 Result<TpcPageRes<TpcLabelRes>> pageResponseResult = gson.fromJson(rstJson, new TypeToken<Result<TpcPageRes<TpcLabelRes>>>() {
                 }.getType());
-                for (TpcLabelRes tpcLabelRes : pageResponseResult.getData().getList()) {
-                    if (Objects.equals(Boolean.TRUE.toString(), tpcLabelRes.getFlagVal())) {
-                        return defaultHttpEnvIpFetch;
+                TpcPageRes<TpcLabelRes> data = pageResponseResult.getData();
+                if(data != null){
+                    List<TpcLabelRes> list = data.getList();
+                    if(list != null){
+                        for (TpcLabelRes tpcLabelRes : pageResponseResult.getData().getList()) {
+                            if (Objects.equals(Boolean.TRUE.toString(), tpcLabelRes.getFlagVal())) {
+                                return defaultHttpEnvIpFetch;
+                            }
+                        }
                     }
                 }
             }
         } catch (Exception e) {
             log.error("getEnvFetchFromRemote error,appId:{}", appId, e);
+        }finally {
+            if(response != null){
+                response.close();
+            }
+            if(body != null){
+                body.close();
+            }
         }
         return null;
     }
