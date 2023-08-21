@@ -51,19 +51,22 @@ public class HeraWebhookService {
      */
 
 //    @NacosValue(value = "${log.agent.condition.pod.prefix}", autoRefreshed = true)
-    private String logAgentConditionPodPrefix = "";
+    private String logAgentConditionPodPrefix = "zheli";
 //    @NacosValue(value = "${log.agent.condition.env}", autoRefreshed = true)
-    private String logAgentConditionEnv = "OT_AGENT";
+    private String logAgentConditionEnv = "K8S_LANGUAGE";
 //    @NacosValue(value = "${log.agent.condition.volume.mounts.name}", autoRefreshed = true)
-    private String logAgentConditionVolumeMountsName = "log-path";
+    private String logAgentConditionVolumeMountsName = "app-logs";
 
     public List<JsonPatch> setPodEnv(JSONObject admissionRequest) {
+        JSONArray containersJson = admissionRequest.getJSONObject("object").getJSONObject("spec").getJSONArray("containers");
+        if(!includeEnv(containersJson)){
+            return new ArrayList<>();
+        }
         String operation = admissionRequest.getString("operation");
         switch (operation) {
             case "CREATE":
             case "UPDATE":
                 List<JsonPatch> result = new ArrayList<>();
-                JSONArray containersJson = admissionRequest.getJSONObject("object").getJSONObject("spec").getJSONArray("containers");
                 for (int i = 0; i < containersJson.size(); i++) {
                     JSONObject container = containersJson.getJSONObject(i);
                     if (container != null) {
@@ -118,7 +121,7 @@ public class HeraWebhookService {
         JSONArray containersJson = admissionRequest.getJSONObject("object").getJSONObject("spec").getJSONArray("containers");
         if (StringUtils.isEmpty(name) || !name.startsWith(logAgentConditionPodPrefix)) {
             // 判断env OT_AGENT=true
-            if(!otelAgentInclude(containersJson)) {
+            if(!includeEnv(containersJson)) {
                 return;
             }
         }
@@ -188,7 +191,7 @@ public class HeraWebhookService {
         return volumeMount;
     }
 
-    private boolean otelAgentInclude(JSONArray containersJson){
+    private boolean includeEnv(JSONArray containersJson){
         if(containersJson == null || containersJson.size() == 0){
             return false;
         }
@@ -198,7 +201,7 @@ public class HeraWebhookService {
                 return false;
             }
             for(int j = 0; j< env.size(); j++){
-                if(logAgentConditionEnv.equals(env.getJSONObject(j).getString("name")) && "true".equals(env.getJSONObject(j).getString("value"))) {
+                if(logAgentConditionEnv.equals(env.getJSONObject(j).getString("name"))) {
                     return true;
                 }
             }
