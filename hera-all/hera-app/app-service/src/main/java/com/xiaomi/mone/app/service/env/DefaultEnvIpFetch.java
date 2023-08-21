@@ -67,14 +67,16 @@ public class DefaultEnvIpFetch {
 
     private EnvIpFetch getEnvFetchFromRemote(String appId) {
         Request request = new Request.Builder()
-                .url(String.format(heraTpcUrl, HERA_TPC_APP_DETAIL_URL))
+                .url(heraTpcUrl + HERA_TPC_APP_DETAIL_URL)
                 .post(new FormBody.Builder().add("parentId", appId)
                         .add("flagKey", DEFAULT_REGISTER_REMOTE_TYPE).build())
                 .build();
         try {
             Response response = okHttpClient.newCall(request).execute();
+            log.info("appId : "+appId+" get mi-tpc response is success: "+response.isSuccessful());
             if (response.isSuccessful()) {
                 String rstJson = response.body().string();
+                log.info("appId : "+appId+" get mi-tpc response : "+rstJson);
                 Result<TpcPageRes<TpcLabelRes>> pageResponseResult = gson.fromJson(rstJson, new TypeToken<Result<TpcPageRes<TpcLabelRes>>>() {
                 }.getType());
                 for (TpcLabelRes tpcLabelRes : pageResponseResult.getData().getList()) {
