@@ -113,6 +113,7 @@ public class HeraAppEnvServiceImpl implements HeraAppEnvService {
                             new LambdaQueryWrapper<HeraAppBaseInfo>().eq(HeraAppBaseInfo::getStatus,
                                     StatusEnum.NOT_DELETED.getCode()));
             List<HeraAppBaseInfo> appBaseInfos = appBaseInfoPage.getRecords();
+            log.info("get base info size : " + (appBaseInfos == null ? 0 : appBaseInfos.size()));
             if (CollectionUtils.isNotEmpty(appBaseInfos)) {
                 appBaseInfos.stream().forEach(baseInfo -> {
                     Integer id = baseInfo.getId();
@@ -133,6 +134,7 @@ public class HeraAppEnvServiceImpl implements HeraAppEnvService {
     }
 
     public void handleAppEnv(Integer id, String bindId, String appName) throws Exception {
+        log.info("handleAppEnv baseInfoId : "+id+" bindId : "+bindId+" appName : "+appName);
         envIpFetch = defaultEnvIpFetch.getEnvFetch(bindId);
         HeraAppEnvVo heraAppEnvVo = envIpFetch.fetch(id.longValue(),
                 Long.valueOf(bindId), appName);

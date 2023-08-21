@@ -1,5 +1,6 @@
 package com.xiaomi.mone.app.service.env;
 
+import com.alibaba.nacos.api.config.annotation.NacosValue;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.JsonObject;
@@ -8,7 +9,6 @@ import com.xiaomi.mone.app.common.Result;
 import com.xiaomi.mone.app.model.vo.HeraAppEnvVo;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import javax.annotation.Resource;
@@ -26,7 +26,7 @@ import static com.xiaomi.mone.app.common.Constant.URL.HERA_OPERATOR_ENV_URL;
 @Slf4j
 public class DefaultHttpEnvIpFetch implements EnvIpFetch {
 
-    @Value("${hera.operator.env.url}")
+    @NacosValue(value = "${hera.operator.env.url}", autoRefreshed = true)
     private String operatorEnvUrl;
     @Resource
     private OkHttpClient okHttpClient;
