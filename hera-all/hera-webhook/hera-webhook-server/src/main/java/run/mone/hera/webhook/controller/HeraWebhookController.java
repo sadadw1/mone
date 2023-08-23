@@ -30,17 +30,17 @@ public class HeraWebhookController {
 
     @RequestMapping(value = "/hera-env-v1", method = RequestMethod.POST)
     public AdmissionReview heraEnvV1(@RequestBody String admissionReview) {
-        log.info("hera webhook get request body : "+admissionReview);
+        log.info("hera webhook get request body : " + admissionReview);
         JSONObject admissionReviewJson = JSONObject.parseObject(admissionReview);
         JSONObject admissionReviewRequestJson = admissionReviewJson.getJSONObject("request");
         String kind = admissionReviewRequestJson.getJSONObject("kind").getString("kind");
         String uid = admissionReviewRequestJson.getString("uid");
         String patchsJson = null;
-        if("Pod".equals(kind)){
-            List<JsonPatch> patchs = heraWebhookService.setPodEnv(admissionReviewRequestJson);
-            heraWebhookService.setLogAgent(admissionReviewRequestJson, patchs);
-            if(patchs != null || patchs.size() > 0){
-                patchsJson = JSONObject.toJSONString(patchs);
+        if ("Pod".equals(kind)) {
+            List<JsonPatch> patches = heraWebhookService.setPodEnv(admissionReviewRequestJson);
+            heraWebhookService.setLogAgent(admissionReviewRequestJson, patches);
+            if (patches != null && patches.size() > 0) {
+                patchsJson = JSONObject.toJSONString(patches);
             }
         }
         final AdmissionReview admissionReviewResp = new AdmissionReview();
@@ -49,8 +49,8 @@ public class HeraWebhookController {
         final AdmissionResponse admissionResponse = new AdmissionResponse();
         admissionResponse.setAllowed(true);
         admissionResponse.setUid(uid);
-        if(StringUtils.isNotEmpty(patchsJson)){
-            log.info("patch json is : "+patchsJson);
+        if (StringUtils.isNotEmpty(patchsJson)) {
+            log.info("patch json is : " + patchsJson);
             admissionResponse.setPatch(Base64.getEncoder().encodeToString(patchsJson.getBytes(StandardCharsets.UTF_8)));
             admissionResponse.setPatchType("JSONPatch");
         }
