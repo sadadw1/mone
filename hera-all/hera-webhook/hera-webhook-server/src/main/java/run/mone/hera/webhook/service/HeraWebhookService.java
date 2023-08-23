@@ -52,12 +52,17 @@ public class HeraWebhookService {
     private static final String LOG_AGENT_RESOURCE_MEMORY = "1Gi";
 
     /**
+     * 针对zheli集群定制，log-agent volumeMounts subPathExpr 按照这个顺序取值拼接
+     */
+    private static final List<String> ZHELI_LOG_AGENT_ENV = Arrays.asList("K8S_NAMESPACE", "K8S_SERVICE", "POD_NAME", "K8S_LANGUAGE");
+
+    /**
      * 添加log-agent条件：
      * 1、pod name prefix必须在 ${LOG_AGENT_POD_CONDITION_POD_PREFIX} 之中
      * 2、pod必须至少有一个容器
      * 3、pod中第一个容器内，环境变量必须包含 ${LOG_AGENT_CONDITION_ENV} 中定义的环境变量
      * 4、pod中第一个容器内，必须要有volumeMounts，并且volumeMounts中必须至少有一个name在 ${LOG_AGENT_VOLUME_MOUNTS_NAME} 中
-     * 5、pod所在namespace属于 ${LOG_AGENT_CONDITION_NAMESPACE} 中设置的
+     * 5、pod所在namespace属于 ${LOG_AGENT_CONDITION_NAMESPACE} 之中
      * 5、只处理类型为POD，且operation为CREATE的请求
      */
 
@@ -72,10 +77,11 @@ public class HeraWebhookService {
         if (StringUtils.isNotEmpty(logAgentConditionPodPrefix)) {
             podPrefixes.addAll(Arrays.asList(logAgentConditionPodPrefix.split(",")));
         }
-        String logAgentConditionEnv = System.getenv("LOG_AGENT_CONDITION_ENV");
-        if (StringUtils.isNotEmpty(logAgentConditionEnv)) {
-            logAgentConditionEnvs.addAll(Arrays.asList(logAgentConditionEnv.split(",")));
-        }
+//        String logAgentConditionEnv = System.getenv("LOG_AGENT_CONDITION_ENV");
+//        if (StringUtils.isNotEmpty(logAgentConditionEnv)) {
+//            logAgentConditionEnvs.addAll(Arrays.asList(logAgentConditionEnv.split(",")));
+//        }
+        logAgentConditionEnvs.addAll(ZHELI_LOG_AGENT_ENV);
         String logAgentConditionVolumeMountsName = System.getenv("LOG_AGENT_VOLUME_MOUNTS_NAME");
         if (StringUtils.isNotEmpty(logAgentConditionVolumeMountsName)) {
             logAgentConditionVolumeMountNames.addAll(Arrays.asList(logAgentConditionVolumeMountsName.split(",")));
@@ -87,17 +93,17 @@ public class HeraWebhookService {
     }
 
     public List<JsonPatch> setPodEnv(JSONObject admissionRequest) {
-        if(!includeNameSpace(admissionRequest.getString("namespace"))){
-            log.info("setPodEnv name space is invalid");
+        if (!includeNameSpace(admissionRequest.getString("namespace"))) {
+            log.warn("setPodEnv name space is invalid");
             return null;
         }
         if (!filterByPodName(admissionRequest)) {
-            log.info("setPodEnv pod name prefix is invalid");
+            log.warn("setPodEnv pod name prefix is invalid");
             return null;
         }
         String operation = admissionRequest.getString("operation");
         if (!"CREATE".equals(operation) && !"UPDATE".equals(operation)) {
-            log.info("setPodEnv operator is invalid");
+            log.warn("setPodEnv operator is invalid");
             return null;
         }
         List<JsonPatch> result = new ArrayList<>();
@@ -153,44 +159,46 @@ public class HeraWebhookService {
 
     public void setLogAgent(JSONObject admissionRequest, List<JsonPatch> jsonPatches) {
         // 按要求过滤
-        if(!includeNameSpace(admissionRequest.getString("namespace"))){
-            log.info("setLogAgent name space is invalid");
+        if (!includeNameSpace(admissionRequest.getString("namespace"))) {
+            log.warn("setLogAgent name space is invalid");
             return;
         }
         if (!filterByPodName(admissionRequest)) {
-            log.info("setLogAgent pod name prefix is invalid");
+            log.warn("setLogAgent pod name prefix is invalid");
             return;
         }
         JSONArray containersJson = admissionRequest.getJSONObject("object").getJSONObject("spec").getJSONArray("containers");
         if (containersJson == null || containersJson.size() == 0) {
-            log.info("setLogAgent container is null");
+            log.warn("setLogAgent container is null");
             return;
         }
         JSONObject container = containersJson.getJSONObject(0);
         if (!includeEnv(container)) {
-            log.info("setLogAgent env is invalid");
+            log.warn("setLogAgent env is invalid");
             return;
         }
         if (!includeVolumeMounts(container)) {
-            log.info("setLogAgent volume mounts is invalid");
+            log.warn("setLogAgent volume mounts is invalid");
             return;
         }
         String operation = admissionRequest.getString("operation");
         if (!"CREATE".equals(operation)) {
-            log.info("setLogAgent operation is invalid");
+            log.warn("setLogAgent operation is invalid");
             return;
         }
 
         // 判断是否存在log-agent，以及获取主容器挂载出来的日志路径信息与Env信息
         if (LOG_AGENT_CONTAINER_NAME.equals(container.getString("name"))) {
-            log.info("setLogAgent log-agent container is exist");
+            log.warn("setLogAgent log-agent container is exist");
             return;
         }
 
         // 获取业务应用的volumeMounts，需要将log-agent的volumeMounts设置为与主容器相同的目录
         List<EnvVar> envs = new ArrayList<>();
-        VolumeMount volumeMount = getVolumeMountAndAddEnv(container, envs);
-
+        VolumeMount volumeMount = getVolumeMountAndAddEnvOnZheli(container, envs, admissionRequest.getString("name"));
+        if (volumeMount == null) {
+            log.warn("setLogAgent volume mounts is null");
+        }
         // 如果满足条件， 则新建log-agent容器
         buildLogAgentContainer(volumeMount, envs, jsonPatches);
     }
@@ -208,6 +216,25 @@ public class HeraWebhookService {
                     JSONArray env = container.getJSONArray("env");
                     envs.addAll(copyEnvForLogAgent(env));
                     return copyVolumeForLogAgent(volumeMountJson);
+                }
+            }
+        }
+        return null;
+    }
+
+    private VolumeMount getVolumeMountAndAddEnvOnZheli(JSONObject container, List<EnvVar> envs, String podName) {
+        JSONArray volumeMountsJson = container.getJSONArray("volumeMounts");
+        log.info("volumeMountsJson is : " + volumeMountsJson);
+        if (volumeMountsJson != null) {
+            for (int i = 0; i < volumeMountsJson.size(); i++) {
+                JSONObject volumeMountJson = volumeMountsJson.getJSONObject(i);
+                String volumeMountName = volumeMountJson.getString("name");
+                log.info("volumeMountName is : " + volumeMountName);
+                if (logAgentConditionVolumeMountNames.contains(volumeMountName)) {
+                    // 复制env
+                    JSONArray env = container.getJSONArray("env");
+                    envs.addAll(copyEnvForLogAgent(env));
+                    return copyVolumeForLogAgentOnZheli(volumeMountJson, envs, podName);
                 }
             }
         }
@@ -245,6 +272,34 @@ public class HeraWebhookService {
         volumeMount.setMountPath(volumeMountJson.getString("mountPath"));
         volumeMount.setSubPathExpr(volumeMountJson.getString("subPathExpr"));
         return volumeMount;
+    }
+
+    private VolumeMount copyVolumeForLogAgentOnZheli(JSONObject volumeMountJson, List<EnvVar> envs, String podName) {
+        VolumeMount volumeMount = new VolumeMount();
+        volumeMount.setName(volumeMountJson.getString("name"));
+        volumeMount.setMountPath(volumeMountJson.getString("mountPath"));
+//        volumeMount.setSubPathExpr(volumeMountJson.getString("subPathExpr"));
+
+        // zheli定制，将subPathExpr按照logAgentConditionEnvs顺序取值拼接，除了POD_NAME，不能出现引用，不能出现空值
+        String k8sNamespace = getEnvValue("K8S_NAMESPACE", envs);
+        String k8sService = getEnvValue("K8S_SERVICE", envs);
+        String k8sLanguage = getEnvValue("K8S_LANGUAGE", envs);
+        if(StringUtils.isEmpty(k8sNamespace) || StringUtils.isEmpty(k8sService) || StringUtils.isEmpty(k8sLanguage)){
+            log.warn("setLogAgent env k8sNamespace or k8sService or k8sLanguage is empty");
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(k8sNamespace).append("/").append(k8sService).append("/").append("${POD_NAME}").append("/").append(k8sLanguage);
+        volumeMount.setSubPathExpr(sb.toString());
+        return volumeMount;
+    }
+
+    private String getEnvValue(String envKey, List<EnvVar> envs) {
+        for (EnvVar envVar : envs) {
+            if (envKey.equals(envVar.getName())) {
+                return envVar.getValue();
+            }
+        }
+        return null;
     }
 
     private boolean includeEnv(JSONObject container) {
@@ -331,6 +386,9 @@ public class HeraWebhookService {
     }
 
     private boolean filterByPodName(JSONObject admissionRequest) {
+        if (podPrefixes.size() == 0) {
+            return false;
+        }
         // 按podName前缀过滤
         String name = admissionRequest.getString("name");
         if (StringUtils.isEmpty(name)) {
@@ -338,9 +396,6 @@ public class HeraWebhookService {
             name = metadata.getString("generateName");
         }
         log.info("setLogAgent get pod name is : " + name);
-        if (StringUtils.isEmpty(name) || podPrefixes.size() == 0) {
-            return false;
-        }
         for (String prefix : podPrefixes) {
             if (name.startsWith(prefix)) {
                 return true;
@@ -349,8 +404,8 @@ public class HeraWebhookService {
         return false;
     }
 
-    private boolean includeNameSpace(String namespace){
-        if(logAgentConditionNameSpaces.size() == 0){
+    private boolean includeNameSpace(String namespace) {
+        if (StringUtils.isEmpty(namespace) || logAgentConditionNameSpaces.size() == 0) {
             return false;
         }
         return logAgentConditionNameSpaces.contains(namespace);
