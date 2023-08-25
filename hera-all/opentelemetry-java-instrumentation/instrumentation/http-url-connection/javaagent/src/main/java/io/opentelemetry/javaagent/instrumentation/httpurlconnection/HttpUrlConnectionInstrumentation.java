@@ -5,6 +5,7 @@
 
 package io.opentelemetry.javaagent.instrumentation.httpurlconnection;
 
+import static io.opentelemetry.api.trace.SpanKind.CLIENT;
 import static io.opentelemetry.javaagent.extension.matcher.AgentElementMatchers.extendsClass;
 import static io.opentelemetry.javaagent.instrumentation.api.Java8BytecodeBridge.currentContext;
 import static io.opentelemetry.javaagent.instrumentation.httpurlconnection.HttpUrlConnectionTracer.tracer;
@@ -69,6 +70,18 @@ public class HttpUrlConnectionInstrumentation implements TypeInstrumentation {
         @Advice.Local("otelHttpUrlState") HttpUrlState httpUrlState,
         @Advice.Local("otelScope") Scope scope,
         @Advice.Local("otelCallDepth") CallDepth callDepth) {
+
+      // 只允许nacos请求
+      if(connection != null && connection.getURL() != null){
+        String host = connection.getURL().getHost();
+        if(host != null && !host.contains("nacos")){
+          return;
+        }
+        String uri = connection.getURL().getPath();
+        if(uri != null && !uri.contains("nacos")){
+          return;
+        }
+      }
 
       callDepth = CallDepthThreadLocalMap.getCallDepth(HttpURLConnection.class);
       if (callDepth.getAndIncrement() > 0) {
@@ -151,7 +164,7 @@ public class HttpUrlConnectionInstrumentation implements TypeInstrumentation {
       if (httpUrlState != null) {
         Span span = Java8BytecodeBridge.spanFromContext(httpUrlState.context);
         span.setAttribute(SemanticAttributes.HTTP_STATUS_CODE, returnValue);
-        StatusCode statusCode = HttpStatusConverter.statusFromHttpStatus(returnValue);
+        StatusCode statusCode = HttpStatusConverter.statusFromHttpStatus(returnValue, CLIENT);
         if (statusCode != StatusCode.UNSET) {
           span.setStatus(statusCode);
         }
