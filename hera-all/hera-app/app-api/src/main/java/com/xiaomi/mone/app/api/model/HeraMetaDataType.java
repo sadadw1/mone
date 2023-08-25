@@ -11,4 +11,5 @@ public class HeraMetaDataType {
     public static final String REDIS = "redis";
     public static final String ES = "es";
     public static final String MQ = "mq";
+    public static final String NACOS = "nacos";
 }
