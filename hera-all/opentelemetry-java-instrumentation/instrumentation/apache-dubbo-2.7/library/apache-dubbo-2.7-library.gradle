@@ -4,7 +4,6 @@ dependencies {
   library("org.apache.dubbo:dubbo:2.7.0"){
     exclude group: 'com.alibaba.spring', module: 'spring-context-support'
   }
-  library "run.mone:infra-common:1.4-SNAPSHOT"
 
   testImplementation project(':instrumentation:apache-dubbo-2.7:testing')
 

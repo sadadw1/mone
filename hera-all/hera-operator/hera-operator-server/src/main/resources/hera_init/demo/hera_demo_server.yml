@@ -41,19 +41,6 @@ spec:
           limits:
             cpu: 500m
             memory: 2500Mi
-
-      - name: log-agent
-        image: herahub/opensource-pub:log-agent-v1
-        env:
-          - name: nacosAddr
-            value: nacos.hera-namespace:80
-        volumeMounts:
-        - mountPath: "/home/work/log"
-          name: log-path
-        resources:
-          limits:
-            cpu: '300m'
-            memory: 1Gi
       volumes:
       - name: log-path
         emptyDir: {}

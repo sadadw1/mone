@@ -7,7 +7,8 @@ import net.bytebuddy.description.type.TypeDescription;
 import net.bytebuddy.matcher.ElementMatcher;
 import org.springframework.web.context.request.NativeWebRequest;
 import org.springframework.web.context.request.ServletWebRequest;
-import run.mone.common.Result;
+
+import java.lang.reflect.Field;
 
 import static io.opentelemetry.javaagent.extension.matcher.AgentElementMatchers.implementsInterface;
 import static io.opentelemetry.javaagent.extension.matcher.ClassLoaderMatcher.hasClassesNamed;
@@ -15,7 +16,7 @@ import static net.bytebuddy.matcher.ElementMatchers.isMethod;
 import static net.bytebuddy.matcher.ElementMatchers.isPublic;
 import static net.bytebuddy.matcher.ElementMatchers.named;
 
-@SuppressWarnings("SystemOut")
+@SuppressWarnings({"SystemOut","CatchAndPrintStackTrace"})
 public class HandlerMethodReturnValueInstrumentation implements TypeInstrumentation {
 
     @Override
@@ -44,12 +45,22 @@ public class HandlerMethodReturnValueInstrumentation implements TypeInstrumentat
         public static void nameResourceAndStartSpan(
                 @Advice.Argument(0) Object returnValue,
                 @Advice.Argument(3) NativeWebRequest request) {
-            if(returnValue != null && returnValue instanceof Result){
-                Result result = (Result)returnValue;
+            if(returnValue != null && "run.mone.common.Result".equals(returnValue.getClass().getName())){
                 if(request instanceof ServletWebRequest){
-                    ServletWebRequest servletRquest = (ServletWebRequest)request;
-                    servletRquest.getResponse().addHeader("X-BUSSINESS-CODE",String.valueOf(result.getCode()));
-                    servletRquest.getResponse().addHeader("X-BUSSINESS-MESSAGE",result.getMessage());
+                    ServletWebRequest servletRequst = (ServletWebRequest)request;
+                    Class<?> returnValueClass = returnValue.getClass();
+                    try {
+                        Field codeFiled = returnValueClass.getDeclaredField("code");
+                        codeFiled.setAccessible(true);
+                        Object code = codeFiled.get(returnValue);
+                        servletRequst.getResponse().addHeader("X-BUSSINESS-CODE",String.valueOf(code));
+                        Field messageFiled = returnValueClass.getDeclaredField("message");
+                        messageFiled.setAccessible(true);
+                        Object message = messageFiled.get(returnValue);
+                        servletRequst.getResponse().addHeader("X-BUSSINESS-MESSAGE",String.valueOf(message));
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                 }
             }
         }
