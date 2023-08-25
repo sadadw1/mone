@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import run.mone.hera.webhook.domain.Container;
 import run.mone.hera.webhook.domain.JsonPatch;
 import run.mone.hera.webhook.domain.Limits;
+import run.mone.hera.webhook.domain.Requests;
 import run.mone.hera.webhook.domain.Resource;
 import run.mone.hera.webhook.domain.VolumeMount;
 
@@ -48,8 +49,10 @@ public class HeraWebhookService {
     private static final String LOG_AGENT_IMAGE = "herahub/opensource-pub:log-agent-v1-release";
     private static final String LOG_AGENT_NACOS_ADDR = "nacos.hera-namespace:80";
     private static final String LOG_AGENT_NACOS_ENV_KEY = "nacosAddr";
-    private static final String LOG_AGENT_RESOURCE_CPU = "300m";
-    private static final String LOG_AGENT_RESOURCE_MEMORY = "1Gi";
+    private static final String LOG_AGENT_RESOURCE_CPU_REQUESTS = "300m";
+    private static final String LOG_AGENT_RESOURCE_MEMORY_REQUESTS = "1Gi";
+    private static final String LOG_AGENT_RESOURCE_CPU_LIMITS = "1";
+    private static final String LOG_AGENT_RESOURCE_MEMORY_LIMITS = "2Gi";
 
     /**
      * 针对zheli集群定制，log-agent volumeMounts subPathExpr 按照这个顺序取值拼接
@@ -102,7 +105,7 @@ public class HeraWebhookService {
             return null;
         }
         String operation = admissionRequest.getString("operation");
-        if (!"CREATE".equals(operation) && !"UPDATE".equals(operation)) {
+        if (!"CREATE".equals(operation)) {
             log.warn("setPodEnv operator is invalid");
             return null;
         }
@@ -198,6 +201,7 @@ public class HeraWebhookService {
         VolumeMount volumeMount = getVolumeMountAndAddEnvOnZheli(container, envs, admissionRequest.getString("name"));
         if (volumeMount == null) {
             log.warn("setLogAgent volume mounts is null");
+            return;
         }
         // 如果满足条件， 则新建log-agent容器
         buildLogAgentContainer(volumeMount, envs, jsonPatches);
@@ -233,7 +237,7 @@ public class HeraWebhookService {
                 if (logAgentConditionVolumeMountNames.contains(volumeMountName)) {
                     // 复制env
                     JSONArray env = container.getJSONArray("env");
-                    envs.addAll(copyEnvForLogAgent(env));
+                    envs.addAll(copyEnvForLogAgentOnZheli(env));
                     return copyVolumeForLogAgentOnZheli(volumeMountJson, envs, podName);
                 }
             }
@@ -251,10 +255,14 @@ public class HeraWebhookService {
         container.setImage(LOG_AGENT_IMAGE);
 
         Limits limits = new Limits();
-        limits.setCpu(LOG_AGENT_RESOURCE_CPU);
-        limits.setMemory(LOG_AGENT_RESOURCE_MEMORY);
+        limits.setCpu(LOG_AGENT_RESOURCE_CPU_LIMITS);
+        limits.setMemory(LOG_AGENT_RESOURCE_MEMORY_LIMITS);
+        Requests requests = new Requests();
+        requests.setCpu(LOG_AGENT_RESOURCE_CPU_REQUESTS);
+        requests.setMemory(LOG_AGENT_RESOURCE_MEMORY_REQUESTS);
         Resource resource = new Resource();
         resource.setLimits(limits);
+        resource.setRequests(requests);
         container.setResources(resource);
 
         container.setVolumeMounts(Collections.singletonList(volumeMount));
@@ -286,9 +294,10 @@ public class HeraWebhookService {
         String k8sLanguage = getEnvValue("K8S_LANGUAGE", envs);
         if(StringUtils.isEmpty(k8sNamespace) || StringUtils.isEmpty(k8sService) || StringUtils.isEmpty(k8sLanguage)){
             log.warn("setLogAgent env k8sNamespace or k8sService or k8sLanguage is empty");
+            return null;
         }
         StringBuilder sb = new StringBuilder();
-        sb.append(k8sNamespace).append("/").append(k8sService).append("/").append("${POD_NAME}").append("/").append(k8sLanguage);
+        sb.append(k8sNamespace).append("/").append(k8sService).append("/").append("$(POD_NAME)").append("/").append(k8sLanguage);
         volumeMount.setSubPathExpr(sb.toString());
         return volumeMount;
     }
@@ -345,6 +354,23 @@ public class HeraWebhookService {
                 }
             }
         }
+        return envs;
+    }
+    private List<EnvVar> copyEnvForLogAgentOnZheli(JSONArray envsJson) {
+        List<EnvVar> envs = new ArrayList<>();
+        if (envsJson != null && envsJson.size() > 0) {
+            for (int i = 0; i < envsJson.size(); i++) {
+                JSONObject envJson = envsJson.getJSONObject(i);
+                String name = envJson.getString("name");
+                // POD_NAME单独手动设置，确保他有值
+                if (logAgentConditionEnvs.contains(name) && !"POD_NAME".equals(name)) {
+                    EnvVar env = JSON.toJavaObject(envJson, EnvVar.class);
+                    envs.add(env);
+                }
+            }
+        }
+        // 单独设置POD_NAME，这是因为在volumeMounts中，subPathExpr目前只有一个POD_NAME是引用变量。所以必须确保log-agent有POD_NAME这个env
+        envs.add(buildEnvRef("POD_NAME", "v1", "metadata.name"));
         return envs;
     }
 
