@@ -3,25 +3,32 @@ package run.mone.hera.webhook.service;
 import com.alibaba.fastjson2.JSON;
 import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import io.fabric8.kubernetes.api.model.EnvVar;
 import io.fabric8.kubernetes.api.model.EnvVarSource;
 import io.fabric8.kubernetes.api.model.ObjectFieldSelector;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import run.mone.hera.webhook.common.HttpClientUtil;
 import run.mone.hera.webhook.domain.Container;
 import run.mone.hera.webhook.domain.JsonPatch;
 import run.mone.hera.webhook.domain.Limits;
 import run.mone.hera.webhook.domain.Requests;
 import run.mone.hera.webhook.domain.Resource;
+import run.mone.hera.webhook.domain.TpcAppInfo;
 import run.mone.hera.webhook.domain.VolumeMount;
 
 import javax.annotation.PostConstruct;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -36,12 +43,21 @@ public class HeraWebhookService {
     private static final String HOST_IP = "host.ip";
     private static final String NODE_IP = "node.ip";
     private static final String MIONE_PROJECT_ENV_NAME = "MIONE_PROJECT_ENV_NAME";
+    private static final String MIONE_PROJECT_ENV_ID = "MIONE_PROJECT_ENV_ID";
     private static final String MIONE_PROJECT_NAME = "MIONE_PROJECT_NAME";
     // cad need env
     // "-" replace of "_"
-    private static final String APPLICATION = "APPLICATION";
+    private static final String APPLICATION = "application";
     private static final String SERVER_ENV = "serverEnv";
     private static final String LOG_AGENT_CONTAINER_NAME = "log-agent";
+
+    /**
+     * operator need labels key
+     */
+    private static final String KEY_OZHERA_APP_NAME = "OZHERA_APP_NAME";
+    private static final String KEY_OZHERA_APP_ENV_ID = "OZHERA_APP_ENV_ID";
+    private static final String KEY_OZHERA_APP_ENV_NAME = "OZHERA_APP_ENV_NAME";
+    private static final String APP_LABEL_KEY = "app";
 
     /**
      * log-agent默认镜像
@@ -57,7 +73,16 @@ public class HeraWebhookService {
     /**
      * 针对zheli集群定制，log-agent volumeMounts subPathExpr 按照这个顺序取值拼接
      */
-    private static final List<String> ZHELI_LOG_AGENT_ENV = Arrays.asList("K8S_NAMESPACE", "K8S_SERVICE", "POD_NAME", "K8S_LANGUAGE");
+    private static final String APP_PREFIX = "zheli";
+    private static final String K8S_NAMESPACE = "K8S_NAMESPACE";
+    private static final String K8S_SERVICE = "K8S_SERVICE";
+    private static final String POD_NAME = "POD_NAME";
+    private static final String K8S_LANGUAGE = "K8S_LANGUAGE";
+
+    private static final String K8S_ENV = "K8S_ENV";
+    private static final String K8S_APP_COUNTRY = "K8S_APP_COUNTRY";
+
+    private static final List<String> ZHELI_LOG_AGENT_ENV = Arrays.asList(K8S_NAMESPACE, K8S_SERVICE, POD_NAME, K8S_LANGUAGE);
 
     /**
      * 添加log-agent条件：
@@ -73,6 +98,16 @@ public class HeraWebhookService {
     private final List<String> logAgentConditionEnvs = new ArrayList<>();
     private final List<String> logAgentConditionVolumeMountNames = new ArrayList<>();
     private final List<String> logAgentConditionNameSpaces = new ArrayList<>();
+
+    /**
+     * 缓存
+     */
+    private static final Cache<String, TpcAppInfo> CACHE =
+            CacheBuilder.newBuilder().maximumSize(1000).expireAfterWrite(Duration.ofMinutes(10)).build();
+    private static final String TPC_URL = "http://mi-tpc:8097/backend/node/inner_list";
+    private static final Map<String, String> TPC_HEADER = new HashMap<>();
+    private static final String TPC_TOKEN = "Ldwi$238DidsafFLDS&)$@!";
+    private static final String TPC_APP_REQUEST_BODY = "{\"type\": 4, \"status\": 0, \"token\":\"" + TPC_TOKEN + "\"}";
 
     @PostConstruct
     private void init() {
@@ -93,6 +128,8 @@ public class HeraWebhookService {
         if (StringUtils.isNotEmpty(logAgentConditionNameSpace)) {
             logAgentConditionNameSpaces.addAll(Arrays.asList(logAgentConditionNameSpace.split(",")));
         }
+
+        TPC_HEADER.put("Content-Type", "application/json");
     }
 
     public List<JsonPatch> setPodEnv(JSONObject admissionRequest) {
@@ -110,51 +147,109 @@ public class HeraWebhookService {
             return null;
         }
         List<JsonPatch> result = new ArrayList<>();
+        String appLabelValue = getLabel(APP_LABEL_KEY, admissionRequest.getJSONObject("object").getJSONObject("metadata").getJSONObject("labels"));
         JSONArray containersJson = admissionRequest.getJSONObject("object").getJSONObject("spec").getJSONArray("containers");
         for (int i = 0; i < containersJson.size(); i++) {
             JSONObject container = containersJson.getJSONObject(i);
             if (container != null) {
-                processContainerEnv(container, i, result);
+                processContainerEnv(container, i, result, appLabelValue);
             }
         }
         return result;
     }
 
-    private void processContainerEnv(JSONObject container, int index, List<JsonPatch> result) {
+    public void setPodLabels(JSONObject admissionRequest, List<JsonPatch> result) {
+        if (!includeNameSpace(admissionRequest.getString("namespace"))) {
+            log.warn("setPodLabels name space is invalid");
+            return;
+        }
+        if (!filterByPodName(admissionRequest)) {
+            log.warn("setPodLabels pod name prefix is invalid");
+            return;
+        }
+        String operation = admissionRequest.getString("operation");
+        if (!"CREATE".equals(operation)) {
+            log.warn("setPodLabels operator is invalid");
+            return;
+        }
+        if (result == null) {
+            result = new ArrayList<>();
+        }
+        JSONObject metadataJson = admissionRequest.getJSONObject("object").getJSONObject("metadata");
+        setOzHeraLabels(result, metadataJson);
+    }
+
+    private void processContainerEnv(JSONObject container, int index, List<JsonPatch> result, String appLabelValue) {
         JSONArray env = container.getJSONArray("env");
-        String basePath = "/spec/containers/" + index + "/env";
+        String envBasePath = "/spec/containers/" + index + "/env";
         // don't have env element
         if (env == null) {
             List<EnvVar> envs = new ArrayList<>();
             envs.add(createPodIdEnv());
             envs.add(createNodeIdEnv());
-            result.add(new JsonPatch("add", basePath, envs));
+            result.add(new JsonPatch("add", envBasePath, envs));
         } else {
             Set<String> envKeys = envKeys(env);
-            String path = basePath + "/-";
+            String path = envBasePath + "/-";
             addIfAbsent(result, path, HOST_IP, createPodIdEnv(), envKeys);
             addIfAbsent(result, path, NODE_IP, createNodeIdEnv(), envKeys);
-            //set cadvisor need env
-            setCadvisorEnv(result, path, env, envKeys);
-        }
-    }
-
-    private void setCadvisorEnv(List<JsonPatch> result, String path, JSONArray env, Set<String> envKeys) {
-        for (int j = 0; j < env.size(); j++) {
-            JSONObject envJson = env.getJSONObject(j);
-            String envKey = envJson.getString("name");
-            String envValue = envJson.getString("value");
-
-            if (!envKeys.contains(APPLICATION) && MIONE_PROJECT_NAME.equals(envKey)) {
-                result.add(new JsonPatch("add", path, buildEnv(APPLICATION, envValue.replaceAll("-", "_"))));
-            }
-            if (!envKeys.contains(SERVER_ENV) && MIONE_PROJECT_ENV_NAME.equals(envKey)) {
-                result.add(new JsonPatch("add", path, buildEnv(SERVER_ENV, envValue)));
+            // get appInfo
+            TpcAppInfo appInfo = getAppInfo(env, appLabelValue);
+            if (appInfo != null) {
+                //set ozhera env
+                setOzHeraEnvs(result, path, appInfo, envKeys);
             }
         }
     }
 
-    private void addIfAbsent(List<JsonPatch> result, String path, String key, EnvVar envVar, Set<String> envKeys) {
+    private void setOzHeraEnvs(List<JsonPatch> result, String path, TpcAppInfo appInfo, Set<String> envKeys) {
+        if (!envKeys.contains(APPLICATION) && StringUtils.isNotEmpty(appInfo.getIdAndName())) {
+            result.add(new JsonPatch("add", path, buildEnv(APPLICATION, appInfo.getIdAndName().replaceAll("-", "_"))));
+        }
+        if (!envKeys.contains(SERVER_ENV) && StringUtils.isNotEmpty(appInfo.getEnvName())) {
+            result.add(new JsonPatch("add", path, buildEnv(SERVER_ENV, appInfo.getEnvName())));
+        }
+        if (!envKeys.contains(MIONE_PROJECT_NAME) && StringUtils.isNotEmpty(appInfo.getIdAndName())) {
+            result.add(new JsonPatch("add", path, buildEnv(MIONE_PROJECT_NAME, appInfo.getIdAndName())));
+        }
+        if (!envKeys.contains(MIONE_PROJECT_ENV_ID) && appInfo.getEnvId() != null && appInfo.getEnvId() != 0) {
+            result.add(new JsonPatch("add", path, buildEnv(MIONE_PROJECT_ENV_ID, String.valueOf(appInfo.getEnvId()))));
+        }
+        if (!envKeys.contains(MIONE_PROJECT_ENV_NAME) && StringUtils.isNotEmpty(appInfo.getEnvName())) {
+            result.add(new JsonPatch("add", path, buildEnv(MIONE_PROJECT_ENV_NAME, appInfo.getEnvName())));
+        }
+    }
+
+    private void setOzHeraLabels(List<JsonPatch> result, JSONObject metadataJson) {
+        JSONObject labelsJson = metadataJson.getJSONObject("labels");
+        String app = getLabel(APP_LABEL_KEY, labelsJson);
+        if (StringUtils.isNotEmpty(app)) {
+            TpcAppInfo tpcAppInfo = CACHE.asMap().get(app);
+            if (tpcAppInfo != null) {
+                String path = "/metadata/labels";
+                if (!labelsJson.containsKey(KEY_OZHERA_APP_NAME) && StringUtils.isNotEmpty(tpcAppInfo.getName())) {
+                    result.add(new JsonPatch("replace", path + "/" + KEY_OZHERA_APP_NAME, tpcAppInfo.getName()));
+                }
+                if (!labelsJson.containsKey(KEY_OZHERA_APP_ENV_ID) && tpcAppInfo.getEnvId() != null && tpcAppInfo.getEnvId() != 0) {
+                    result.add(new JsonPatch("replace", path + "/" + KEY_OZHERA_APP_ENV_ID, String.valueOf(tpcAppInfo.getEnvId())));
+                }
+                if (!labelsJson.containsKey(KEY_OZHERA_APP_ENV_NAME) && StringUtils.isNotEmpty(tpcAppInfo.getEnvName())) {
+                    result.add(new JsonPatch("replace", path + "/" + KEY_OZHERA_APP_ENV_NAME, tpcAppInfo.getEnvName()));
+                }
+            }
+        }
+    }
+
+    private String getLabel(String key, JSONObject labelsJson) {
+        if (StringUtils.isNotEmpty(key) && labelsJson != null && !labelsJson.isEmpty()) {
+            return labelsJson.getString(key);
+        }
+        return null;
+    }
+
+
+    private void addIfAbsent(List<JsonPatch> result, String path, String key, EnvVar
+            envVar, Set<String> envKeys) {
         if (!envKeys.contains(key)) {
             result.add(new JsonPatch("add", path, envVar));
         }
@@ -282,7 +377,8 @@ public class HeraWebhookService {
         return volumeMount;
     }
 
-    private VolumeMount copyVolumeForLogAgentOnZheli(JSONObject volumeMountJson, List<EnvVar> envs, String podName) {
+    private VolumeMount copyVolumeForLogAgentOnZheli(JSONObject volumeMountJson, List<EnvVar> envs, String
+            podName) {
         VolumeMount volumeMount = new VolumeMount();
         volumeMount.setName(volumeMountJson.getString("name"));
         volumeMount.setMountPath(volumeMountJson.getString("mountPath"));
@@ -292,7 +388,7 @@ public class HeraWebhookService {
         String k8sNamespace = getEnvValue("K8S_NAMESPACE", envs);
         String k8sService = getEnvValue("K8S_SERVICE", envs);
         String k8sLanguage = getEnvValue("K8S_LANGUAGE", envs);
-        if(StringUtils.isEmpty(k8sNamespace) || StringUtils.isEmpty(k8sService) || StringUtils.isEmpty(k8sLanguage)){
+        if (StringUtils.isEmpty(k8sNamespace) || StringUtils.isEmpty(k8sService) || StringUtils.isEmpty(k8sLanguage)) {
             log.warn("setLogAgent env k8sNamespace or k8sService or k8sLanguage is empty");
             return null;
         }
@@ -312,11 +408,11 @@ public class HeraWebhookService {
     }
 
     private boolean includeEnv(JSONObject container) {
-        if (logAgentConditionEnvs.size() == 0) {
+        if (logAgentConditionEnvs.isEmpty()) {
             return false;
         }
         JSONArray env = container.getJSONArray("env");
-        if (env == null || env.size() == 0) {
+        if (env == null || env.isEmpty()) {
             return false;
         }
         Set<String> envNames = new HashSet<>();
@@ -327,7 +423,7 @@ public class HeraWebhookService {
     }
 
     private boolean includeVolumeMounts(JSONObject container) {
-        if (logAgentConditionVolumeMountNames.size() == 0) {
+        if (logAgentConditionVolumeMountNames.isEmpty()) {
             return false;
         }
         JSONArray volumeMountsJson = container.getJSONArray("volumeMounts");
@@ -344,7 +440,7 @@ public class HeraWebhookService {
 
     private List<EnvVar> copyEnvForLogAgent(JSONArray envsJson) {
         List<EnvVar> envs = new ArrayList<>();
-        if (envsJson != null && envsJson.size() > 0) {
+        if (envsJson != null && !envsJson.isEmpty()) {
             for (int i = 0; i < envsJson.size(); i++) {
                 JSONObject envJson = envsJson.getJSONObject(i);
                 String name = envJson.getString("name");
@@ -356,9 +452,10 @@ public class HeraWebhookService {
         }
         return envs;
     }
+
     private List<EnvVar> copyEnvForLogAgentOnZheli(JSONArray envsJson) {
         List<EnvVar> envs = new ArrayList<>();
-        if (envsJson != null && envsJson.size() > 0) {
+        if (envsJson != null && !envsJson.isEmpty()) {
             for (int i = 0; i < envsJson.size(); i++) {
                 JSONObject envJson = envsJson.getJSONObject(i);
                 String name = envJson.getString("name");
@@ -403,7 +500,7 @@ public class HeraWebhookService {
 
     private Set<String> envKeys(JSONArray envs) {
         Set<String> keySet = new HashSet<>();
-        if (envs != null && envs.size() > 0) {
+        if (envs != null && !envs.isEmpty()) {
             for (int i = 0; i < envs.size(); i++) {
                 keySet.add(envs.getJSONObject(i).getString("name"));
             }
@@ -412,28 +509,141 @@ public class HeraWebhookService {
     }
 
     private boolean filterByPodName(JSONObject admissionRequest) {
-        if (podPrefixes.size() == 0) {
+        if (podPrefixes.isEmpty()) {
             return false;
         }
         // 按podName前缀过滤
-        String name = admissionRequest.getString("name");
-        if (StringUtils.isEmpty(name)) {
-            JSONObject metadata = admissionRequest.getJSONObject("object").getJSONObject("metadata");
-            name = metadata.getString("generateName");
-        }
-        log.info("setLogAgent get pod name is : " + name);
-        for (String prefix : podPrefixes) {
-            if (name.startsWith(prefix)) {
-                return true;
+        String name = getPodName(admissionRequest);
+        if (StringUtils.isNotEmpty(name)) {
+            for (String prefix : podPrefixes) {
+                if (name.startsWith(prefix)) {
+                    return true;
+                }
             }
         }
         return false;
     }
 
+    private String getPodName(JSONObject admissionRequest) {
+        String name = admissionRequest.getString("name");
+        if (StringUtils.isEmpty(name)) {
+            JSONObject metadata = admissionRequest.getJSONObject("object").getJSONObject("metadata");
+            name = metadata.getString("generateName");
+        }
+        log.info("get pod name is : " + name);
+        return name;
+    }
+
     private boolean includeNameSpace(String namespace) {
-        if (StringUtils.isEmpty(namespace) || logAgentConditionNameSpaces.size() == 0) {
+        if (StringUtils.isEmpty(namespace) || logAgentConditionNameSpaces.isEmpty()) {
             return false;
         }
         return logAgentConditionNameSpaces.contains(namespace);
+    }
+
+    private TpcAppInfo getAppInfo(JSONArray envs, String appLabelValue) {
+        // 先获取K8S_SERVICE的值，这个是完整的name
+        if (StringUtils.isNotEmpty(appLabelValue)) {
+            TpcAppInfo appInfo = CACHE.asMap().get(appLabelValue);
+            if (appInfo == null) {
+                appInfo = new TpcAppInfo();
+                String k8sEnv = getEnv(envs, K8S_ENV);
+                String k8sCountry = getEnv(envs, K8S_APP_COUNTRY);
+                String k8sService = getEnv(envs, K8S_SERVICE);
+                if(StringUtils.isNotEmpty(k8sEnv) && StringUtils.isNotEmpty(k8sCountry) && StringUtils.isNotEmpty(k8sService)){
+                    getAppNameFromTpc(k8sEnv, k8sCountry, k8sService, appInfo);
+                    getEnvFromTpc(k8sEnv, appInfo);
+                    CACHE.put(appLabelValue, appInfo);
+                }else{
+                    log.warn("K8S_ENV or K8S_APP_COUNTRY or K8S_SERVICE");
+                }
+            }
+            return appInfo;
+        }
+        return null;
+    }
+
+    private void getAppNameFromTpc(String k8sEnv, String k8sCountry, String k8sService, TpcAppInfo appInfo) {
+
+        String resp = HttpClientUtil.sendPostRequest(TPC_URL, TPC_APP_REQUEST_BODY, TPC_HEADER);
+
+        try {
+            if (StringUtils.isNotEmpty(resp)) {
+                JSONObject jsonObject = JSONObject.parseObject(resp);
+                Integer code = jsonObject.getInteger("code");
+                if (code == 0) {
+                    JSONObject data = jsonObject.getJSONObject("data");
+                    if (data != null) {
+                        JSONArray list = data.getJSONArray("list");
+                        if (list != null) {
+                            for (int i = 0; i < list.size(); i++) {
+                                JSONObject node = list.getJSONObject(i);
+                                Long appId = node.getLong("outId") == null || node.getLong("outId") == 0 ? node.getLong("id") : node.getLong("outId");
+                                String appName = node.getString("nodeName");
+                                if (appId == null || appId == 0 || StringUtils.isEmpty(appName)) {
+                                    log.warn("get appName from tpc is null, appId : " + appId + " appName : " + appName);
+                                } else {
+                                    String k8sServiceNew = APP_PREFIX + "-" + appName + "-" + k8sCountry + "-" + k8sEnv;
+                                    if (k8sService.equals(k8sServiceNew)) {
+                                        appInfo.setId(node.getLong("id"));
+                                        appInfo.setOutId(node.getLong("outId"));
+                                        appInfo.setName(appName);
+                                        appInfo.setIdAndName(appId + "-" + appName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            log.error("get appName parse tpc resp error, ", t);
+        }
+    }
+
+    private void getEnvFromTpc(String k8sEnv, TpcAppInfo tpcAppInfo) {
+        String envBody = "{\"parentId\":" + tpcAppInfo.getId() + ",\"type\":6,\"status\":0,\"token\":\"" + TPC_TOKEN + "\"}";
+        String resp = HttpClientUtil.sendPostRequest(TPC_URL, envBody, TPC_HEADER);
+
+        try {
+            if (StringUtils.isNotEmpty(resp)) {
+                JSONObject jsonObject = JSONObject.parseObject(resp);
+                Integer code = jsonObject.getInteger("code");
+                if (code == 0) {
+                    JSONObject data = jsonObject.getJSONObject("data");
+                    if (data != null) {
+                        JSONArray list = data.getJSONArray("list");
+                        if (list != null) {
+                            for (int i = 0; i < list.size(); i++) {
+                                JSONObject node = list.getJSONObject(i);
+                                Long envId = node.getLong("id");
+                                String envName = node.getString("nodeName");
+                                if (envId == null || envId == 0 || StringUtils.isEmpty(envName)) {
+                                    log.warn("get env from tpc is null, envId : " + envId + " envName : " + envName);
+                                } else {
+                                    if (k8sEnv.equals(envName)) {
+                                        tpcAppInfo.setEnvId(envId);
+                                        tpcAppInfo.setEnvName(envName);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Throwable t) {
+            log.error("get env parse tpc resp error, ", t);
+        }
+    }
+
+    private String getEnv(JSONArray envs, String envKey) {
+        if (envs != null && StringUtils.isNotEmpty(envKey)) {
+            for (int i = 0; i < envs.size(); i++) {
+                JSONObject envJson = envs.getJSONObject(i);
+                if (envKey.equals(envJson.getString("name")))
+                    return envJson.getString("value");
+            }
+        }
+        return null;
     }
 }

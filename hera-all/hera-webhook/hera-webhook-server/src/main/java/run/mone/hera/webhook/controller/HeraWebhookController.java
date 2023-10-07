@@ -38,6 +38,7 @@ public class HeraWebhookController {
         String patchsJson = null;
         if ("Pod".equals(kind)) {
             List<JsonPatch> patches = heraWebhookService.setPodEnv(admissionReviewRequestJson);
+            heraWebhookService.setPodLabels(admissionReviewRequestJson, patches);
             heraWebhookService.setLogAgent(admissionReviewRequestJson, patches);
             if (patches != null && patches.size() > 0) {
                 patchsJson = JSONObject.toJSONString(patches);
