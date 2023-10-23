@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: jaeger-all-container
-        image: prod-mione-opensource-registry.cn-beijing.cr.aliyuncs.com/prod-mione-opensource/prod-mione-opensource:jaeger-collector
+        image: herahub/opensource-pub:jaeger-collector
         imagePullPolicy: Always
         env:
           - name: SPAN_STORAGE_TYPE

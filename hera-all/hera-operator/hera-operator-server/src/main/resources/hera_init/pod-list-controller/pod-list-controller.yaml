@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pod-list-controller
+  namespace: hera-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: pod-list-controller
+  template:
+    metadata:
+      labels:
+        control-plane: pod-list-controller
+    spec:
+      containers:
+        - name: manager
+          image: herahub/opensource-pub:pod-list-controller-v3
+          env:
+            - name: MATCH_KEY
+              value: OZHERA_APP_NAME
+          resources:
+            limits:
+              cpu: '1'
+              memory: 2Gi
+            requests:
+              cpu: 100m
+              memory: 500Mi
+          imagePullPolicy: Always
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mi-operator-env
+  namespace: hera-namespace
+  labels:
+    run: mi-operator-env
+spec:
+  ports:
+    - protocol: TCP
+      port: 8097
+      targetPort: 8997
+  selector:
+    control-plane: pod-list-controller
+  clusterIP: None

@@ -89,15 +89,20 @@ spec:
       labels:
         app: hera-webhook-server
     spec:
-      imagePullSecrets:
-        - name: mione-opensource-credential
       volumes:
         - name: hera-webhook-tls-sh-volume
           configMap:
             name: hera-webhook-tls-sh
       containers:
         - name: hera-webhook-server
-          image: herahub/opensource-pub:hera-webhook-server-v1-release
+          image: herahub/opensource-pub:hera-webhook-server-v2-5
+          env:
+            - name: LOG_AGENT_POD_CONDITION_POD_PREFIX
+              value: hera-demo
+            - name: LOG_AGENT_VOLUME_MOUNTS_NAME
+              value: log-path,app-logs
+            - name: LOG_AGENT_CONDITION_NAMESPACE
+              value: hera-namespace
           volumeMounts:
             - name: hera-webhook-tls-sh-volume
               mountPath: /tmp/hera-webhook-tls-sh

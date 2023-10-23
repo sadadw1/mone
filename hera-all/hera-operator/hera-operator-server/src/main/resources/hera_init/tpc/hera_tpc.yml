@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: mi-tpc-container
-        image: herahub/opensource-pub:mi-tpc-v1-release
+        image: herahub/opensource-pub:mi-tpc-v6
         resources:
           limits:
             cpu: '500m'

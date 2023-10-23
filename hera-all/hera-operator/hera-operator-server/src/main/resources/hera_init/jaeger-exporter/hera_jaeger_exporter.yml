@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: jaeger-exporter-container
-        image: prod-mione-opensource-registry.cn-beijing.cr.aliyuncs.com/prod-mione-opensource/prod-mione-opensource:jaeger-exporter-v4
+        image: herahub/opensource-pub:jaeger-exporter-v1
         resources:
           limits:
             cpu: '500m'
