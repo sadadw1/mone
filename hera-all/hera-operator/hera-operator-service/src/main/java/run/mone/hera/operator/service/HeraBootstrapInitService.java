@@ -415,6 +415,39 @@ public class HeraBootstrapInitService {
             traceEtlServer.setDefaultYaml();
             resourceList.add(traceEtlServer);
 
+            HeraResource jaeger = HeraResource.builder()
+                    .needCreate(true)
+                    .required(true)
+                    .defaultYamlPath("/hera_init/jaeger/hera_jaeger.yml")
+                    .resourceType(ResourceTypeEnum.HERA_APP.getTypeName())
+                    .resourceName("hera-jaeger")
+                    .remark("load hera jaeger")
+                    .build();
+            jaeger.setDefaultYaml();
+            resourceList.add(jaeger);
+
+            HeraResource jaegerExporter = HeraResource.builder()
+                    .needCreate(true)
+                    .required(true)
+                    .defaultYamlPath("/hera_init/jaeger-exporter/hera_jaeger_exporter.yml")
+                    .resourceType(ResourceTypeEnum.HERA_APP.getTypeName())
+                    .resourceName("hera-jaeger-exporter")
+                    .remark("load jaeger-exporter")
+                    .build();
+            jaegerExporter.setDefaultYaml();
+            resourceList.add(jaegerExporter);
+
+            HeraResource podListController = HeraResource.builder()
+                    .needCreate(true)
+                    .required(true)
+                    .defaultYamlPath("/hera_init/pod-list-controller/pod-list-controller.yaml")
+                    .resourceType(ResourceTypeEnum.HERA_APP.getTypeName())
+                    .resourceName("hera-pod-list-controller")
+                    .remark("load pod-list-controller")
+                    .build();
+            podListController.setDefaultYaml();
+            resourceList.add(podListController);
+
             HeraResource heraWebhook = HeraResource.builder()
                     .needCreate(true)
                     .required(true)
