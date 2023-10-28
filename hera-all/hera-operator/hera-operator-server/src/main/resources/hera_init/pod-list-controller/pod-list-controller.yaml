@@ -27,6 +27,7 @@ spec:
               cpu: 100m
               memory: 500Mi
           imagePullPolicy: Always
+      serviceAccountName: admin-mone
 ---
 apiVersion: v1
 kind: Service
