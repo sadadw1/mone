@@ -10,7 +10,7 @@ spec:
       protocol: TCP
   selector:
     app: hera-nginx-fe
-  type: LoadBalancer
+
 
 ---
 apiVersion: v1
@@ -25,7 +25,7 @@ spec:
       protocol: TCP
   selector:
     app: tpc-nginx-fe
-  type: LoadBalancer
+
 
 ---
 apiVersion: v1
@@ -40,7 +40,7 @@ spec:
       protocol: TCP
   selector:
     app: tpclogin-nginx-fe
-  type: LoadBalancer
+
 
 ---
 apiVersion: v1
@@ -55,7 +55,7 @@ spec:
       protocol: TCP
   selector:
     app: grafana
-  type: LoadBalancer
+
 
 ---
 apiVersion: v1
@@ -66,7 +66,7 @@ metadata:
   labels:
     k8s-app: alertmanager
 spec:
-  type: LoadBalancer
+
   ports:
     - name: http
       port: 80
@@ -87,4 +87,3 @@ spec:
       protocol: TCP
   selector:
     app: prometheus
-  type: LoadBalancer

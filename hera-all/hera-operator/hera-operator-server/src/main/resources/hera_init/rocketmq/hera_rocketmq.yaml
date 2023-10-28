@@ -426,7 +426,7 @@ spec:
 
       targetPort: 8080
 
-      nodePort: 31081
+      nodePort: 31181
 
   selector:
 

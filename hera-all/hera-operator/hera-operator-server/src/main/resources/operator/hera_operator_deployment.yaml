@@ -12,7 +12,7 @@ spec:
       name: hera-operator-port
       port: 8998
       targetPort: hera-8998
-      nodePort: 30998
+      nodePort: 31998
   selector:
     app: hera-operator
 ---
@@ -51,11 +51,12 @@ spec:
       containers:
         - name: hera-operator
           image: herahub/opensource-pub:hera-operator-v2-release
+          imagePullPolicy: Always
           ports:
             - containerPort: 8998
               name: hera-8998
         - name: hera-operator-fe
-          image: herahub/opensource-pub:hera-operator-fe-v1-release
+          image: herahub/opensource-pub:hera-operator-fe-v2-1
           ports:
             - containerPort: 7001
               name: hera-7001

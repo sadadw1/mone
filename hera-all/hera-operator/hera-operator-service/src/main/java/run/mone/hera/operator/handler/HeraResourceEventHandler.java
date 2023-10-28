@@ -122,6 +122,8 @@ public class HeraResourceEventHandler implements ResourceEventHandler<HeraBootst
                 TimeUnit.SECONDS.sleep(step--);
                 block2checkStatus(objectMeta);
 
+
+
                 //3. Resource initialization
                 for (HeraResource heraResource : hrList) {
                     // nacos configuration initialization
@@ -215,7 +217,7 @@ public class HeraResourceEventHandler implements ResourceEventHandler<HeraBootst
             if (!ready) {
                 TimeUnit.SECONDS.sleep(i + 2);
             } else {
-                TimeUnit.SECONDS.sleep(15);
+                TimeUnit.SECONDS.sleep(30);
                 return;
             }
         }
