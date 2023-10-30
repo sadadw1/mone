@@ -15,6 +15,9 @@
  */
 package run.mone.hera.operator.common;
 
+
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -53,6 +56,7 @@ public class ESIndexConst {
             "    \"index_patterns\":[\n" +
             "        \"" + DRIVER_INDEX + "*\"\n" +
             "    ],\n" +
+            "  \"template\": {\n" +
             "        \"settings\":{\n" +
             "            \"index\":{\n" +
             "                \"lifecycle\":{\n" +
@@ -110,12 +114,14 @@ public class ESIndexConst {
             "            }\n" +
             "        }\n" +
             "}\n" +
+            "}\n" +
             "\n";
 
     public static final String TRACE_SERVICE_JSON = "{\n" +
             "    \"index_patterns\":[\n" +
             "        \"" + TRACE_SERVICE_INDEX + "*\"\n" +
             "    ],\n" +
+            "  \"template\": {\n" +
             "        \"settings\":{\n" +
             "            \"index\":{\n" +
             "                \"lifecycle\":{\n" +
@@ -157,12 +163,14 @@ public class ESIndexConst {
             "\n" +
             "            }\n" +
             "        }\n" +
+            "        }\n" +
             "}";
 
     public static final String TRACE_SPAN_JSON = "{\n" +
             "    \"index_patterns\":[\n" +
             "        \"" + TRACE_SPAN_INDEX + "*\"\n" +
             "    ],\n" +
+            "  \"template\": {\n" +
             "        \"settings\":{\n" +
             "  \"index\": {\n" +
             "    \"lifecycle\": {\n" +
@@ -338,12 +346,14 @@ public class ESIndexConst {
             "        \"aliases\":{\n" +
             "  \"" + TRACE_SPAN_INDEX + "\": {}\n" +
             "}\n" +
+            "}\n" +
             "}";
 
     public static final String ERROR_SLOW_JSON = "{\n" +
             "    \"index_patterns\":[\n" +
             "        \"" + ERROR_SLOW_INDEX + "*\"\n" +
             "    ],\n" +
+            "  \"template\": {\n" +
             "        \"settings\":{\n" +
             "            \"index\":{\n" +
             "                \"lifecycle\":{\n" +
@@ -444,10 +454,12 @@ public class ESIndexConst {
             "\n" +
             "            }\n" +
             "        }\n" +
+            "        }\n" +
             "}";
 
     public static final String LOG_APP_MULTIPLE_INDEX_MAPPING = "{\n" +
             "  \"index_patterns\": [\"" + LOG_APP_MULTIPLE_INDEX + "*\"],\n" +
+            "  \"template\": {\n" +
             "  \"settings\": {\n" +
             "    \"index\": {\n" +
             "      \"lifecycle\": {\n" +
@@ -596,10 +608,12 @@ public class ESIndexConst {
             "  \"aliases\": {\n" +
             "    \"" + LOG_APP_MULTIPLE_INDEX + "\": {}\n" +
             "  }\n" +
+            "  }\n" +
             "}";
 
     public static final String LOG_APP_SINGLE_INDEX_MAPPING = "{\n" +
             "  \"index_patterns\": [\"" + LOG_APP_SINGLE_INDEX + "*\"],\n" +
+            "  \"template\": {\n" +
             "  \"settings\": {\n" +
             "    \"index\": {\n" +
             "      \"lifecycle\": {\n" +
@@ -748,10 +762,12 @@ public class ESIndexConst {
             "  \"aliases\": {\n" +
             "    \"" + LOG_APP_SINGLE_INDEX + "\": {}\n" +
             "  }\n" +
+            "  }\n" +
             "}";
 
     public static final String LOG_APP_NGINX_INDEX_MAPPING = "{\n" +
             "  \"index_patterns\": [\"" + LOG_APP_NGINX_INDEX + "*\"],\n" +
+            "  \"template\": {\n" +
             "  \"settings\": {\n" +
             "    \"index\": {\n" +
             "      \"lifecycle\": {\n" +
@@ -900,10 +916,12 @@ public class ESIndexConst {
             "  \"aliases\": {\n" +
             "    \"" + LOG_APP_NGINX_INDEX + "\": {}\n" +
             "  }\n" +
+            "  }\n" +
             "}";
 
     public static final String LOG_APP_OTHER_INDEX_MAPPING = "{\n" +
             "  \"index_patterns\": [\"" + LOG_APP_OTHER_INDEX + "*\"],\n" +
+            "  \"template\": {\n" +
             "  \"settings\": {\n" +
             "    \"index\": {\n" +
             "      \"lifecycle\": {\n" +
@@ -1052,6 +1070,7 @@ public class ESIndexConst {
             "  \"aliases\": {\n" +
             "    \"" + LOG_APP_OTHER_INDEX + "\": {}\n" +
             "  }\n" +
+            "  }\n" +
             "}";
 
     public static Map<String, String> templates = new HashMap<>();
@@ -1073,13 +1092,23 @@ public class ESIndexConst {
 
     public static void main(String[] args) {
         // update your es api address
-        String esApiAddr = "elasticsearch:9200";
+        String esApiAddr = "xxxxx";
+        String userName = "xxxxx";
+        String password = "xxxxx";
 
         for (String index : templates.keySet()) {
-            System.out.println("curl --location --request PUT 'http://" + esApiAddr + "/_template/" + index + "' \\\n" +
+            System.out.println("curl --location --request PUT 'http://" + esApiAddr + "/_index_template/" + index + "' \\\n" +
                     "--header 'Content-type: application/json; charset=UTF-8' \\\n" +
+                    "--header 'Authorization: "+generateOuth2(userName, password)+"' \\\n" +
                     "--data-raw '" + templates.get(index).replaceAll("\\\n", "").replaceAll("\\\t", "").replaceAll(" ", "") + "'");
             System.out.println("=============================================================");
         }
+    }
+
+    private static String generateOuth2(String userName, String password) {
+        String oriStr = userName + ":" + password;
+        Base64.Encoder base64 = Base64.getEncoder();
+        String base64Str = new String(base64.encode(oriStr.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
+        return "Basic " + base64Str;
     }
 }

@@ -1,8 +1,7 @@
 CREATE
 DATABASE  IF NOT EXISTS `hera`  DEFAULT CHARACTER SET utf8mb4 ;
 
-USE
-`hera`;
+USE `hera`;
 
 -- trace-etl
 
@@ -450,26 +449,6 @@ CREATE TABLE `rules`
     `update_time`      date         DEFAULT NULL COMMENT '更新时间',
     PRIMARY KEY (`rule_id`),
     UNIQUE KEY `unique_key` (`rule_alert`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
-
-
--- ----------------------------
--- Table structure for app_scrape_job
--- ----------------------------
-CREATE TABLE `app_scrape_job`
-(
-    `id`          int(11) unsigned NOT NULL AUTO_INCREMENT COMMENT '自增id',
-    `iam_id`      int(11) NOT NULL COMMENT 'iam树的id',
-    `user`        varchar(64)  NOT NULL DEFAULT '' COMMENT '操作用户',
-    `job_json`    text                  DEFAULT NULL COMMENT '抓取配置json',
-    `message`     varchar(255) NOT NULL DEFAULT '' COMMENT '请求返回的信息',
-    `data`        varchar(255)          DEFAULT '' COMMENT '成功则是请求返回的抓取id',
-    `job_name`    varchar(64)           DEFAULT NULL COMMENT '抓取的job的名字',
-    `status`      tinyint(2) unsigned NOT NULL DEFAULT '0' COMMENT 'job状态 0创建失败 1创建成功 2 已删除',
-    `job_desc`    varchar(255)          DEFAULT '' COMMENT 'job描述',
-    `create_time` datetime     NOT NULL COMMENT '创建时间',
-    `update_time` datetime              DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-    PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 
 
