@@ -50,6 +50,8 @@ public class HeraWebhookService {
     private static final String APPLICATION = "application";
     private static final String SERVER_ENV = "serverEnv";
     private static final String LOG_AGENT_CONTAINER_NAME = "log-agent";
+    private static final String POD_IP_CAD = "POD_IP";
+    private static final String NODE_IP_CAD = "NODE_IP";
 
     /**
      * operator need labels key
@@ -187,12 +189,16 @@ public class HeraWebhookService {
             List<EnvVar> envs = new ArrayList<>();
             envs.add(createPodIdEnv());
             envs.add(createNodeIdEnv());
+            envs.add(createPodIpCADEnv());
+            envs.add(createNodeIpCADEnv());
             result.add(new JsonPatch("add", envBasePath, envs));
         } else {
             Set<String> envKeys = envKeys(env);
             String path = envBasePath + "/-";
             addIfAbsent(result, path, HOST_IP, createPodIdEnv(), envKeys);
             addIfAbsent(result, path, NODE_IP, createNodeIdEnv(), envKeys);
+            addIfAbsent(result, path, POD_IP_CAD, createPodIpCADEnv(), envKeys);
+            addIfAbsent(result, path, NODE_IP_CAD, createNodeIpCADEnv(), envKeys);
             // get appInfo
             TpcAppInfo appInfo = getAppInfo(env, appLabelValue);
             if (appInfo != null) {
@@ -285,10 +291,12 @@ public class HeraWebhookService {
             return;
         }
 
-        // 判断是否存在log-agent，以及获取主容器挂载出来的日志路径信息与Env信息
-        if (LOG_AGENT_CONTAINER_NAME.equals(container.getString("name"))) {
-            log.warn("setLogAgent log-agent container is exist");
-            return;
+        // 判断是否存在log-agent
+        for (int i = 0; i < containersJson.size(); i++) {
+            if (LOG_AGENT_CONTAINER_NAME.equals(containersJson.getJSONObject(i).getString("name"))) {
+                log.warn("setLogAgent log-agent container is exist");
+                return;
+            }
         }
 
         // 获取业务应用的volumeMounts，需要将log-agent的volumeMounts设置为与主容器相同的目录
@@ -479,6 +487,15 @@ public class HeraWebhookService {
         return buildEnvRef(NODE_IP, "v1", "status.hostIP");
     }
 
+
+    private EnvVar createPodIpCADEnv() {
+        return buildEnvRef(POD_IP_CAD, "v1", "status.podIP");
+    }
+
+    private EnvVar createNodeIpCADEnv() {
+        return buildEnvRef(NODE_IP_CAD, "v1", "status.hostIP");
+    }
+
     private EnvVar buildEnv(String key, String value) {
         EnvVar env = new EnvVar();
         env.setName(key);
@@ -550,11 +567,11 @@ public class HeraWebhookService {
                 String k8sEnv = getEnv(envs, K8S_ENV);
                 String k8sCountry = getEnv(envs, K8S_APP_COUNTRY);
                 String k8sService = getEnv(envs, K8S_SERVICE);
-                if(StringUtils.isNotEmpty(k8sEnv) && StringUtils.isNotEmpty(k8sCountry) && StringUtils.isNotEmpty(k8sService)){
+                if (StringUtils.isNotEmpty(k8sEnv) && StringUtils.isNotEmpty(k8sCountry) && StringUtils.isNotEmpty(k8sService)) {
                     getAppNameFromTpc(k8sEnv, k8sCountry, k8sService, appInfo);
                     getEnvFromTpc(k8sEnv, appInfo);
                     CACHE.put(appLabelValue, appInfo);
-                }else{
+                } else {
                     log.warn("K8S_ENV or K8S_APP_COUNTRY or K8S_SERVICE");
                 }
             }

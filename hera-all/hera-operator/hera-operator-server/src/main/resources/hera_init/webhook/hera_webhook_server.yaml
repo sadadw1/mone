@@ -95,7 +95,7 @@ spec:
             name: hera-webhook-tls-sh
       containers:
         - name: hera-webhook-server
-          image: herahub/opensource-pub:hera-webhook-server-v2-5
+          image: herahub/opensource-pub:hera-webhook-server-v2-6
           env:
             - name: LOG_AGENT_POD_CONDITION_POD_PREFIX
               value: hera-demo
