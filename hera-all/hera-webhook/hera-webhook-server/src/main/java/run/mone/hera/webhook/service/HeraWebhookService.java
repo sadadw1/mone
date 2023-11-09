@@ -64,7 +64,7 @@ public class HeraWebhookService {
     /**
      * log-agent默认镜像
      */
-    private static final String LOG_AGENT_IMAGE = "herahub/opensource-pub:log-agent-v1-release";
+    private static final String LOG_AGENT_IMAGE = "zheli-docker-registry-registry-vpc.cn-beijing.cr.aliyuncs.com/sre/oz-log-agent:v1-release";
     private static final String LOG_AGENT_NACOS_ADDR = "nacos.hera-namespace:80";
     private static final String LOG_AGENT_NACOS_ENV_KEY = "nacosAddr";
     private static final String LOG_AGENT_RESOURCE_CPU_REQUESTS = "300m";
