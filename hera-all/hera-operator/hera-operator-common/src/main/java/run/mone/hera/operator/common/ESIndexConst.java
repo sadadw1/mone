@@ -67,7 +67,7 @@ public class ESIndexConst {
             "                        \"total_shards_per_node\":\"2\"\n" +
             "                    }\n" +
             "                },\n" +
-            "                \"number_of_shards\":\"1\",\n" +
+            "                \"number_of_shards\":\"3\",\n" +
             "                \"number_of_replicas\":\"0\"\n" +
             "            }\n" +
             "        },\n" +
@@ -132,7 +132,7 @@ public class ESIndexConst {
             "                        \"total_shards_per_node\":\"2\"\n" +
             "                    }\n" +
             "                },\n" +
-            "                \"number_of_shards\":\"1\",\n" +
+            "                \"number_of_shards\":\"3\",\n" +
             "                \"number_of_replicas\":\"0\"\n" +
             "            }\n" +
             "        },\n" +
@@ -182,7 +182,7 @@ public class ESIndexConst {
             "        \"total_shards_per_node\": \"6\"\n" +
             "      }\n" +
             "    },\n" +
-            "    \"number_of_shards\": \"1\",\n" +
+            "    \"number_of_shards\": \"3\",\n" +
             "    \"number_of_replicas\": \"0\"\n" +
             "  }\n" +
             "},\n" +
@@ -357,14 +357,14 @@ public class ESIndexConst {
             "        \"settings\":{\n" +
             "            \"index\":{\n" +
             "                \"lifecycle\":{\n" +
-            "                    \"name\":\"1Warm_7Del\"\n" +
+            "                    \"name\":\"7Del\"\n" +
             "                },\n" +
             "                \"routing\":{\n" +
             "                    \"allocation\":{\n" +
             "                        \"total_shards_per_node\":\"2\"\n" +
             "                    }\n" +
             "                },\n" +
-            "                \"number_of_shards\":\"1\",\n" +
+            "                \"number_of_shards\":\"3\",\n" +
             "                \"number_of_replicas\":\"0\"\n" +
             "            }\n" +
             "        },\n" +
@@ -470,7 +470,7 @@ public class ESIndexConst {
             "          \"total_shards_per_node\": \"2\"\n" +
             "        }\n" +
             "      },\n" +
-            "      \"number_of_shards\": \"1\",\n" +
+            "      \"number_of_shards\": \"3\",\n" +
             "      \"number_of_replicas\": \"0\"\n" +
             "    }\n" +
             "  },\n" +
@@ -624,7 +624,7 @@ public class ESIndexConst {
             "          \"total_shards_per_node\": \"2\"\n" +
             "        }\n" +
             "      },\n" +
-            "      \"number_of_shards\": \"1\",\n" +
+            "      \"number_of_shards\": \"3\",\n" +
             "      \"number_of_replicas\": \"0\"\n" +
             "    }\n" +
             "  },\n" +
@@ -778,7 +778,7 @@ public class ESIndexConst {
             "          \"total_shards_per_node\": \"2\"\n" +
             "        }\n" +
             "      },\n" +
-            "      \"number_of_shards\": \"1\",\n" +
+            "      \"number_of_shards\": \"3\",\n" +
             "      \"number_of_replicas\": \"0\"\n" +
             "    }\n" +
             "  },\n" +
@@ -932,7 +932,7 @@ public class ESIndexConst {
             "          \"total_shards_per_node\": \"2\"\n" +
             "        }\n" +
             "      },\n" +
-            "      \"number_of_shards\": \"1\",\n" +
+            "      \"number_of_shards\": \"3\",\n" +
             "      \"number_of_replicas\": \"0\"\n" +
             "    }\n" +
             "  },\n" +
@@ -1092,9 +1092,9 @@ public class ESIndexConst {
 
     public static void main(String[] args) {
         // update your es api address
-        String esApiAddr = "xxxxx";
-        String userName = "xxxxx";
-        String password = "xxxxx";
+        String esApiAddr = "zheli-es-pt.zheli-inc.com:9200";
+        String userName = "elastic";
+        String password = "Abcd$123";
 
         for (String index : templates.keySet()) {
             System.out.println("curl --location --request PUT 'http://" + esApiAddr + "/_index_template/" + index + "' \\\n" +
