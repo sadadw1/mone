@@ -64,7 +64,8 @@ public class HeraWebhookService {
     /**
      * log-agent默认镜像
      */
-    private static final String LOG_AGENT_IMAGE = "zheli-docker-registry-registry-vpc.cn-beijing.cr.aliyuncs.com/sre/oz-log-agent:v1-release";
+    private static final String DEFAULT_LOG_AGENT_IMAGE = "zheli-docker-registry-registry-vpc.cn-beijing.cr.aliyuncs.com/sre/oz-log-agent:v1-release";
+    private static final String LOG_AGENT_IMAGE_ENV_KEY = "LOG_AGENT_IMAGE";
     private static final String LOG_AGENT_NACOS_ADDR = "nacos.hera-namespace:80";
     private static final String LOG_AGENT_NACOS_ENV_KEY = "nacosAddr";
     private static final String LOG_AGENT_RESOURCE_CPU_REQUESTS = "300m";
@@ -355,7 +356,7 @@ public class HeraWebhookService {
         String path = "/spec/containers/-";
         Container container = new Container();
         container.setName(LOG_AGENT_CONTAINER_NAME);
-        container.setImage(LOG_AGENT_IMAGE);
+        container.setImage(System.getenv(LOG_AGENT_IMAGE_ENV_KEY) == null ? DEFAULT_LOG_AGENT_IMAGE : System.getenv(LOG_AGENT_IMAGE_ENV_KEY));
 
         Limits limits = new Limits();
         limits.setCpu(LOG_AGENT_RESOURCE_CPU_LIMITS);
