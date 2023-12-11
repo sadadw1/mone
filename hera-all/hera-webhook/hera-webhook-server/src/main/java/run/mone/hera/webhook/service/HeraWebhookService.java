@@ -602,11 +602,15 @@ public class HeraWebhookService {
                                     log.warn("get appName from tpc is null, appId : " + appId + " appName : " + appName);
                                 } else {
                                     String k8sServiceNew = APP_PREFIX + "-" + appName + "-" + k8sCountry + "-" + k8sEnv;
-                                    if (k8sService.equals(k8sServiceNew)) {
+                                    String k8sServiceProd = APP_PREFIX + "-" + appName + "-" + k8sCountry;
+                                    if (k8sService.equals(k8sServiceNew) || k8sService.equals(k8sServiceProd)) {
                                         appInfo.setId(node.getLong("id"));
                                         appInfo.setOutId(node.getLong("outId"));
                                         appInfo.setName(appName);
                                         appInfo.setIdAndName(appId + "-" + appName);
+                                        return;
+                                    }else{
+                                        log.warn("env k8sService : "+k8sService+" is not equals "+k8sServiceNew+" or "+k8sServiceProd);
                                     }
                                 }
                             }
