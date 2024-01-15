@@ -18,6 +18,8 @@ package run.mone.hera.operator.service;
 import com.google.common.base.Preconditions;
 import com.google.gson.Gson;
 import com.xiaomi.youpin.docean.anno.Service;
+import com.xiaomi.youpin.infra.rpc.Result;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.ContainerStatus;
 import io.fabric8.kubernetes.api.model.KubernetesResourceList;
 import io.fabric8.kubernetes.api.model.LoadBalancerIngress;
@@ -27,10 +29,13 @@ import io.fabric8.kubernetes.api.model.NodeAddress;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodList;
+import io.fabric8.kubernetes.api.model.Secret;
 import io.fabric8.kubernetes.api.model.ServiceList;
 import io.fabric8.kubernetes.api.model.ServiceSpec;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
 import io.fabric8.kubernetes.api.model.apps.DeploymentList;
+import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequest;
+import io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequestList;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.dsl.MixedOperation;
 import io.fabric8.kubernetes.client.dsl.Resource;
@@ -52,10 +57,12 @@ import run.mone.hera.operator.common.ResourceTypeEnum;
 import run.mone.hera.operator.dto.DeployStateDTO;
 import run.mone.hera.operator.dto.HeraOperatorDefineDTO;
 import run.mone.hera.operator.dto.PodStateDTO;
+import sun.nio.cs.StandardCharsets;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.InputStreamReader;
 import java.io.Reader;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -64,6 +71,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -95,6 +103,8 @@ public class HeraBootstrapInitService {
 
     @javax.annotation.Resource
     private K8sUtilBean k8sUtilBean;
+
+    private String webhookConfigYaml;
 
     private volatile HeraOperatorDefineDTO heraOperatorDefine = new HeraOperatorDefineDTO();
 
@@ -837,5 +847,178 @@ public class HeraBootstrapInitService {
                 }
             }
         }
+    }
+
+    public Result webhookCreate(String namespace){
+        try {
+            createHeraEnvWebhook(namespace);
+            return Result.success(true);
+        }catch (Throwable t){
+            log.error("create webhook error , ",t);
+            return Result.fromException(t);
+        }
+    }
+
+    public void createHeraEnvWebhook(String namespace) {
+        try {
+            String app = "hera-webhook-server";
+            String csrName = app + "." + namespace + ".svc";
+            String dir = "/tmp/hera-webhook-tls/";
+            /**
+             * This is the encryption password for generating the p12 file.
+             * If you need to modify it, remember to also modify the value of 'server.ssl.key-store-password' in the 'application.properties' file of the 'hera-webhook-server' project.
+             */
+            String defaultP12Pwd = "mone";
+            String csrShellFilePath = "/tmp/hera-webhook-tls-sh/generate_csr_by_openssl.sh";
+            // generate csr file, and get csr base64 string
+            String csrArgs = buildShellArgs(app, namespace, dir, csrName);
+            Process process = callScript(csrShellFilePath, csrArgs);
+            if (process == null) {
+                log.error("generate SSL file error!!");
+                return;
+            }
+            String csrBase64 = getCsrBase64(process);
+            if(StringUtils.isEmpty(csrBase64)){
+                log.error("get csr base64 string is empty");
+                return;
+            }
+            // create k8s certificate, approve is and get certificate from k8s
+            String certificate = getCertificate(csrName, csrBase64);
+            // generate .pem and .p12 file, to be used by webhook-server
+            String pemShellFilePath = "/tmp/hera-webhook-tls-sh/generate_pem_p12_by_openssl.sh";
+            String pemArgs = buildShellArgs(app, dir, certificate, defaultP12Pwd);
+            callScript(pemShellFilePath, pemArgs);
+            // load webhook config
+            String webhookConfigYaml = FileUtils.readResourceFile("/hera_init/webhook/hera_webhook_config.yaml");
+            webhookConfigYaml = webhookConfigYaml.replace("${webhook_caBundle}", "'" + certificate + "'").replace("${webhook_namespace}", namespace);
+            this.webhookConfigYaml = webhookConfigYaml;
+            k8sUtilBean.applyYaml(webhookConfigYaml, namespace, "add");
+
+            // create config map for .p12
+            String p12FilePath = dir + app + ".p12";
+            createConfigMapFromFile(namespace, "hera-webhook-server-p12", p12FilePath);
+        } catch (Throwable t) {
+            log.error("create hera env webhook error : ", t);
+        }
+    }
+
+    private Process callScript(String script, String args) {
+        try {
+            String cmd = "sh " + script + " " + args;
+            log.info("callScript comand : " + cmd);
+            return Runtime.getRuntime().exec(cmd, null, null);
+        } catch (Exception e) {
+            throw new RuntimeException("call script error : ", e);
+        }
+    }
+
+    private String getCsrBase64(Process process) {
+        try (BufferedReader input = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line = "";
+            String csrLogPrefix = "csr base64 is :";
+            while ((line = input.readLine()) != null) {
+                log.info(line);
+                if (line.startsWith(csrLogPrefix)) {
+                    return line.substring(csrLogPrefix.length());
+                }
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("call script error : ", e);
+        }
+        return null;
+    }
+
+    private String getCertificate(String csrName, String csrBase64) {
+        // delete existing csr
+        CertificateSigningRequestList list = kubernetesClient.certificates().v1().certificateSigningRequests().list();
+        if (list != null) {
+            for (CertificateSigningRequest csr : list.getItems()) {
+                if (csrName.equals(csr.getMetadata().getName())) {
+                    kubernetesClient.certificates().v1().certificateSigningRequests().delete(csr);
+                }
+            }
+        }
+        // replace yaml, create csr and approve it
+        String cstYaml = FileUtils.readResourceFile("/hera_init/csr/webhook_csr.yaml");
+        cstYaml = cstYaml.replace("${CSR_NAME}", csrName).replace("${CSR_BASE64}", csrBase64);
+        log.info("csr yaml : "+cstYaml);
+        try {
+            k8sUtilBean.applyYaml(cstYaml, null, "add");
+            // wait for csr create
+            boolean isSuccessCreate = false;
+            for (int i = 0; i < 30; i++) {
+                io.fabric8.kubernetes.client.dsl.Resource<io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequest> csrResource = kubernetesClient.certificates().v1().certificateSigningRequests().withName(csrName);
+                if (csrResource != null && csrResource.get() != null) {
+                    isSuccessCreate = true;
+                    break;
+                }
+                TimeUnit.SECONDS.sleep(2);
+            }
+            if (!isSuccessCreate) {
+                throw new RuntimeException("the csr not create success!");
+            }
+            // approve
+            kubernetesClient.certificates().v1().certificateSigningRequests().withName(csrName).approve();
+            // get certificate
+            // wait for be present in kubernetes
+            boolean isSuccessPresent = false;
+            String certificate = null;
+            for (int i = 0; i < 30; i++) {
+                certificate = kubernetesClient.certificates().v1().certificateSigningRequests().withName(csrName).get().getStatus().getCertificate();
+                if (StringUtils.isNotEmpty(certificate)) {
+                    isSuccessPresent = true;
+                    break;
+                }
+                TimeUnit.SECONDS.sleep(2);
+            }
+            if (!isSuccessPresent) {
+                throw new RuntimeException("the csr not present success!");
+            }
+            return certificate;
+        } catch (Throwable t) {
+            throw new RuntimeException("laod yaml error : ", t);
+        }
+    }
+
+    private String buildShellArgs(String... args) {
+        StringBuilder result = new StringBuilder();
+        for (String arg : args) {
+            result.append(arg).append(" ");
+        }
+        return result.toString().trim();
+    }
+
+    private void createConfigMapFromFile(String namespace, String configMapName, String configMapFilePath){
+        log.info("create config map : "+namespace+" "+configMapName+" "+configMapFilePath);
+        ConfigMap configMap = new ConfigMap();
+        configMap.setApiVersion("v1");
+        configMap.setKind("ConfigMap");
+        ObjectMeta meta = new ObjectMeta();
+        meta.setName(configMapName);
+        meta.setNamespace(namespace);
+        configMap.setMetadata(meta);
+        Map<String,String> map = new HashMap<>();
+        String base64 = Base64.getEncoder().encodeToString(FileUtils.fileToByteArray(configMapFilePath));
+        map.put("hera-webhook-server.p12", base64);
+        log.info("config map data : "+map);
+        configMap.setData(map);
+        kubernetesClient.configMaps().inNamespace(namespace).createOrReplace(configMap);
+    }
+
+    private void createSecretFromFile(String namespace, String secretName, String configMapFilePath){
+        log.info("create config map : "+namespace+" "+secretName+" "+configMapFilePath);
+
+        Secret secret = new Secret();
+
+        ObjectMeta meta = new ObjectMeta();
+        meta.setName(secretName);
+        meta.setNamespace(namespace);
+
+        secret.setMetadata(meta);
+
+        Map<String,String> map = new HashMap<>();
+        map.put("hera-webhook-server.p12", new String(FileUtils.fileToByteArray(configMapFilePath)));
+        secret.setData(map);
+        kubernetesClient.secrets().inNamespace(namespace).createOrReplace();
     }
 }

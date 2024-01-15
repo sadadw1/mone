@@ -17,6 +17,7 @@ package run.mone.hera.operator.common;
 
 import com.google.gson.Gson;
 import com.xiaomi.youpin.docean.anno.Component;
+import io.fabric8.kubernetes.api.model.ConfigMap;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.apps.Deployment;
@@ -33,7 +34,11 @@ import run.mone.hera.operator.bo.HeraResource;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * @author shanwb
@@ -184,10 +189,31 @@ public class K8sUtilBean {
                     continue;
                 }
 
+                if (hasMetadata instanceof io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequest) {
+                    io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequest heraCertificateSigningRequest = (io.fabric8.kubernetes.api.model.certificates.v1.CertificateSigningRequest) hasMetadata;
+                    if ("delete".equals(action)) {
+                        kubernetesClient.certificates().v1().certificateSigningRequests().delete(heraCertificateSigningRequest);
+                    } else {
+                        kubernetesClient.certificates().v1().certificateSigningRequests().createOrReplace(heraCertificateSigningRequest);
+                    }
+                    continue;
+                }
+
+                if (hasMetadata instanceof io.fabric8.kubernetes.api.model.admissionregistration.v1.MutatingWebhookConfiguration) {
+                    io.fabric8.kubernetes.api.model.admissionregistration.v1.MutatingWebhookConfiguration heraMutatingWebhookConfiguration = (io.fabric8.kubernetes.api.model.admissionregistration.v1.MutatingWebhookConfiguration) hasMetadata;
+                    if ("delete".equals(action)) {
+                        kubernetesClient.admissionRegistration().v1().mutatingWebhookConfigurations().delete(heraMutatingWebhookConfiguration);
+                    } else {
+                        kubernetesClient.admissionRegistration().v1().mutatingWebhookConfigurations().createOrReplace(heraMutatingWebhookConfiguration);
+                    }
+                    continue;
+                }
+
                 log.warn("not support k8s kind:{}, yaml:{}", hasMetadata.getKind(), gson.toJson(hasMetadata.getMetadata()));
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
+
 }

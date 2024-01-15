@@ -30,16 +30,16 @@ public class Bootstrap {
 
     private static String webhookConfigYaml;
 
-    private static final String HERA_NAMESPACE = "hera-namespace";
+    private static final String HERA_NAMESPACE = "ozhera-namespace";
 
     public static void main(String[] args) {
         try {
             Ioc.ins().init("run.mone.docean.plugin", "com.xiaomi.youpin.docean.plugin", "run.mone.hera.webhook");
             k8sUtilBean = Ioc.ins().getBean(K8sUtilBean.class);
             kubernetesClient = Ioc.ins().getBean(KubernetesClient.class);
-            createHeraEnvWebhook();
+//            createHeraEnvWebhook();
             SpringApplication.run(Bootstrap.class, args);
-            Runtime.getRuntime().addShutdownHook(new Thread(()->{deleteWebHookConfig();}));
+//            Runtime.getRuntime().addShutdownHook(new Thread(()->{deleteWebHookConfig();}));
         } catch (Throwable throwable) {
             throwable.printStackTrace();
             System.exit(-1);

@@ -223,4 +223,11 @@ public class HeraOperatorController {
         }
     }
 
+    //
+    @RequestMapping(path = "/hera/operator/webhook/create")
+    public Result webhookCreate(){
+        String namespace = "ozhera-namespace";
+        return heraBootstrapInitService.webhookCreate(namespace);
+    }
+
 }

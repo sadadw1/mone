@@ -17,9 +17,13 @@
 package run.mone.hera.webhook.common;
 
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 /**
  * @author shanwb
@@ -44,6 +48,27 @@ public class FileUtils {
         }
     }
 
+    public static String fileToStringReadLine(File file) {
+        StringBuilder sb = new StringBuilder();
+        String line;
+        try(BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            while ((line = reader.readLine()) != null) {
+                sb.append(line).append(System.lineSeparator());
+            }
+            return sb.toString();
+        }catch (IOException e){
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static byte[] fileToByteArray(String filePath){
+        try {
+            byte[] fileContent = Files.readAllBytes(Paths.get(filePath));
+            return fileContent;
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
 
 

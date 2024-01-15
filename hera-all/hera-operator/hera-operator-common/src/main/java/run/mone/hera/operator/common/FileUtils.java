@@ -21,6 +21,8 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 
 /**
  * @author shanwb
@@ -54,6 +56,15 @@ public class FileUtils {
             }
             return sb.toString();
         }catch (IOException e){
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static byte[] fileToByteArray(String filePath){
+        try {
+            byte[] fileContent = Files.readAllBytes(Paths.get(filePath));
+            return fileContent;
+        } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
