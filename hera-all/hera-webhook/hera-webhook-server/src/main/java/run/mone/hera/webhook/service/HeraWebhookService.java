@@ -66,6 +66,8 @@ public class HeraWebhookService {
      */
     private static final String DEFAULT_LOG_AGENT_IMAGE = "zheli-docker-registry-registry-vpc.cn-beijing.cr.aliyuncs.com/sre/oz-log-agent:v1-release";
     private static final String LOG_AGENT_IMAGE_ENV_KEY = "LOG_AGENT_IMAGE";
+    private static final String LOG_AGENT_LIMIT_CPU_ENV_KEY = "LOG_AGENT_LIMIT_CPU";
+    private static final String LOG_AGENT_LIMIT_MEM_ENV_KEY = "LOG_AGENT_LIMIT_MEM";
     private static final String LOG_AGENT_NACOS_ADDR = "nacos.ozhera-namespace:80";
     private static final String LOG_AGENT_NACOS_ENV_KEY = "nacosAddr";
     private static final String LOG_AGENT_RESOURCE_CPU_REQUESTS = "300m";
@@ -359,9 +361,10 @@ public class HeraWebhookService {
         container.setImage(System.getenv(LOG_AGENT_IMAGE_ENV_KEY) == null ? DEFAULT_LOG_AGENT_IMAGE : System.getenv(LOG_AGENT_IMAGE_ENV_KEY));
 
         Limits limits = new Limits();
-        limits.setCpu(LOG_AGENT_RESOURCE_CPU_LIMITS);
-        limits.setMemory(LOG_AGENT_RESOURCE_MEMORY_LIMITS);
+        limits.setCpu(System.getenv(LOG_AGENT_LIMIT_CPU_ENV_KEY) == null ? LOG_AGENT_RESOURCE_CPU_LIMITS : System.getenv(LOG_AGENT_LIMIT_CPU_ENV_KEY));
+        limits.setMemory(System.getenv(LOG_AGENT_LIMIT_MEM_ENV_KEY) == null ? LOG_AGENT_RESOURCE_MEMORY_LIMITS : System.getenv(LOG_AGENT_LIMIT_MEM_ENV_KEY));
         Requests requests = new Requests();
+
         requests.setCpu(LOG_AGENT_RESOURCE_CPU_REQUESTS);
         requests.setMemory(LOG_AGENT_RESOURCE_MEMORY_REQUESTS);
         Resource resource = new Resource();
@@ -400,6 +403,14 @@ public class HeraWebhookService {
         if (StringUtils.isEmpty(k8sNamespace) || StringUtils.isEmpty(k8sService) || StringUtils.isEmpty(k8sLanguage)) {
             log.warn("setLogAgent env k8sNamespace or k8sService or k8sLanguage is empty");
             return null;
+        }
+        /**
+         * 给log-agent种上应用ID与名称的环境变量，用于log-agent收到tail配置时，判断该配置是否是当前应用的配置，
+         * 防止出现小概率的、一批业务pod重启时，产生podIp复用的问题，导致tail配置下发错误。
+         */
+        TpcAppInfo tpcAppInfo = CACHE.asMap().get(k8sService);
+        if(tpcAppInfo != null) {
+            envs.add(buildEnv(MIONE_PROJECT_NAME, tpcAppInfo.getIdAndName()));
         }
         StringBuilder sb = new StringBuilder();
         sb.append(k8sNamespace).append("/").append(k8sService).append("/").append("$(POD_NAME)").append("/").append(k8sLanguage);
@@ -570,6 +581,10 @@ public class HeraWebhookService {
                 String k8sService = getEnv(envs, K8S_SERVICE);
                 if (StringUtils.isNotEmpty(k8sEnv) && StringUtils.isNotEmpty(k8sCountry) && StringUtils.isNotEmpty(k8sService)) {
                     getAppNameFromTpc(k8sEnv, k8sCountry, k8sService, appInfo);
+                    // 如果没有匹配到项目ID，就直接返回null，不种OzHera的ENV
+                    if(appInfo.getId() == null){
+                        return null;
+                    }
                     getEnvFromTpc(k8sEnv, appInfo);
                     CACHE.put(appLabelValue, appInfo);
                 } else {
@@ -609,11 +624,10 @@ public class HeraWebhookService {
                                         appInfo.setName(appName);
                                         appInfo.setIdAndName(appId + "-" + appName);
                                         return;
-                                    }else{
-                                        log.warn("env k8sService : "+k8sService+" is not equals "+k8sServiceNew+" or "+k8sServiceProd);
                                     }
                                 }
                             }
+                            log.warn("can not match tpc!!! k8s_service : " + k8sService);
                         }
                     }
                 }
