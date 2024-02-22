@@ -30,6 +30,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * @Description
@@ -53,6 +55,7 @@ public class HeraWebhookService {
     private static final String POD_IP_CAD = "POD_IP";
     private static final String NODE_IP_CAD = "NODE_IP";
 
+    private static String tpcPageSize = null;
     /**
      * operator need labels key
      */
@@ -112,7 +115,6 @@ public class HeraWebhookService {
     private static final String TPC_URL = "http://mi-tpc:8097/backend/node/inner_list";
     private static final Map<String, String> TPC_HEADER = new HashMap<>();
     private static final String TPC_TOKEN = "Ldwi$238DidsafFLDS&)$@!";
-    private static final String TPC_APP_REQUEST_BODY = "{\"type\": 4, \"status\": 0, \"token\":\"" + TPC_TOKEN + "\"}";
 
     @PostConstruct
     private void init() {
@@ -134,6 +136,8 @@ public class HeraWebhookService {
             logAgentConditionNameSpaces.addAll(Arrays.asList(logAgentConditionNameSpace.split(",")));
         }
 
+        // tpc
+        tpcPageSize = System.getenv("TPC_PAGE_SIZE");
         TPC_HEADER.put("Content-Type", "application/json");
     }
 
@@ -580,7 +584,7 @@ public class HeraWebhookService {
                 String k8sCountry = getEnv(envs, K8S_APP_COUNTRY);
                 String k8sService = getEnv(envs, K8S_SERVICE);
                 if (StringUtils.isNotEmpty(k8sEnv) && StringUtils.isNotEmpty(k8sCountry) && StringUtils.isNotEmpty(k8sService)) {
-                    getAppNameFromTpc(k8sEnv, k8sCountry, k8sService, appInfo);
+                    getAppIdFromTpc(k8sEnv, k8sCountry, k8sService, appInfo);
                     // 如果没有匹配到项目ID，就直接返回null，不种OzHera的ENV
                     if(appInfo.getId() == null){
                         return null;
@@ -596,9 +600,23 @@ public class HeraWebhookService {
         return null;
     }
 
-    private void getAppNameFromTpc(String k8sEnv, String k8sCountry, String k8sService, TpcAppInfo appInfo) {
+    private void getAppIdFromTpc(String k8sEnv, String k8sCountry, String k8sService, TpcAppInfo appInfo) {
 
-        String resp = HttpClientUtil.sendPostRequest(TPC_URL, TPC_APP_REQUEST_BODY, TPC_HEADER);
+        if(StringUtils.isEmpty(k8sService)){
+            return;
+        }
+
+        String appName = getAppName(k8sService, k8sCountry);
+        if(StringUtils.isEmpty(appName)){
+            return;
+        }
+        String tpcAppRequestBody;
+        if(StringUtils.isEmpty(tpcPageSize)) {
+            tpcAppRequestBody = "{\"type\": 4, \"status\": 0, \"token\":\"" + TPC_TOKEN + "\", \"nodeName\":\"" + appName + "\"}";
+        }else{
+            tpcAppRequestBody = "{\"type\": 4, \"status\": 0, \"token\":\"" + TPC_TOKEN + "\", \"nodeName\":\"" + appName + "\", \"pageSize\": "+tpcPageSize+"}";
+        }
+        String resp = HttpClientUtil.sendPostRequest(TPC_URL, tpcAppRequestBody, TPC_HEADER);
 
         try {
             if (StringUtils.isNotEmpty(resp)) {
@@ -612,13 +630,11 @@ public class HeraWebhookService {
                             for (int i = 0; i < list.size(); i++) {
                                 JSONObject node = list.getJSONObject(i);
                                 Long appId = node.getLong("outId") == null || node.getLong("outId") == 0 ? node.getLong("id") : node.getLong("outId");
-                                String appName = node.getString("nodeName");
+                                String appNameFromTpc = node.getString("nodeName");
                                 if (appId == null || appId == 0 || StringUtils.isEmpty(appName)) {
                                     log.warn("get appName from tpc is null, appId : " + appId + " appName : " + appName);
                                 } else {
-                                    String k8sServiceNew = APP_PREFIX + "-" + appName + "-" + k8sCountry + "-" + k8sEnv;
-                                    String k8sServiceProd = APP_PREFIX + "-" + appName + "-" + k8sCountry;
-                                    if (k8sService.equals(k8sServiceNew) || k8sService.equals(k8sServiceProd)) {
+                                    if (appName.equals(appNameFromTpc)) {
                                         appInfo.setId(node.getLong("id"));
                                         appInfo.setOutId(node.getLong("outId"));
                                         appInfo.setName(appName);
@@ -681,5 +697,35 @@ public class HeraWebhookService {
             }
         }
         return null;
+    }
+
+    private String getAppName(String k8sService, String k8sCountry){
+        if(StringUtils.isNotEmpty(k8sService)){
+            String regex = APP_PREFIX + "-(.*?)-" + k8sCountry;
+            Pattern pattern = Pattern.compile(regex);
+            Matcher matcher = pattern.matcher(k8sService);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+        log.error("k8s service is invalid, k8s service is : "+k8sService);
+        return null;
+    }
+
+    public static void main(String[] args) {
+        String appName = "api-admin";
+        String zone = "bj";
+        String env = "test";
+        String serviceName = APP_PREFIX + "-" + appName + "-" + zone;
+
+        if(StringUtils.isNotEmpty(serviceName)){
+            String regex = APP_PREFIX + "-(.*?)-" + zone;
+            Pattern pattern = Pattern.compile(regex);
+            Matcher matcher = pattern.matcher(serviceName);
+            if (matcher.find()) {
+                String result = matcher.group(1);
+                System.out.println(result);
+            }
+        }
     }
 }
