@@ -16,6 +16,7 @@ import run.mone.hive.configs.LLMConfig;
 import run.mone.hive.llm.LLM;
 import run.mone.hive.llm.LLMProvider;
 import run.mone.hive.schema.AiMessage;
+import run.mone.hive.utils.XmlParser;
 import run.mone.mcp.playwright.service.LLMService;
 
 import java.io.IOException;
@@ -27,7 +28,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class WebSocketHandler extends TextWebSocketHandler {
 
-    private final List<WebSocketSession> sessions = new CopyOnWriteArrayList<>();
+    private final List<WebSocketSession> sessions = new CopyOnWriteArrayList<WebSocketSession>();
 
     private LLM llm;
 
@@ -42,9 +43,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
         llm = new LLM(config);
     }
 
+
+    private String itemName = "mac苹果电脑";
+
+
+    //这是一个购物的任务列表
     private List<String> messageList = Lists.newArrayList(
             "打开京东",
-            "jd首页:搜索mac苹果电脑",
+            "jd首页:搜索 ",
             "搜素详情页:点击排名第一的商品的图片(在商品列表里,有图)",
             "商品详情页:点击 加入购物车 按钮(红色大按钮)",
             "购物车加购页面:点击去购物车结算按钮"
@@ -170,7 +176,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
             return;
         }
 
-
         JsonObject obj = JsonParser.parseString(payload).getAsJsonObject();
         if (obj.has("from")) {
             String from = obj.get("from").getAsString();
@@ -208,27 +213,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
                     return;
                 }
 
-                //打开了指定的tab
-                if (cmd.equals("open_tab_finish")) {
-                    res.addProperty("data",
-                            """
-                                    
-                                    <action type="buildDomTree">
-                                    渲染页面
-                                    </action>
-                                    
-                                    <action type="screenshot">
-                                    截取屏幕
-                                    </action>
-                                    
-                                    <action type="notification">
-                                    通知服务器
-                                    </action>
-                                    
-                                    """);
-                    sendMessageToAll(res.toString());
-                    return;
-                }
 
                 //需要ai来返回操作内容
                 if (data.equals("cz")) {
@@ -240,8 +224,54 @@ public class WebSocketHandler extends TextWebSocketHandler {
                     return;
                 }
 
+
+                if (this.index == 0) {
+                    String actionRes = llm.chat("""
+                            帮我分析下,用户的想法是否是想购物 如果是则直接返回shopping,不然返回chat.
+                            
+                            例子:
+                            帮我去京东挑选下mac电脑
+                            
+                            返回的格式:
+                            <boltAction type="shopping" subType="mac电脑"  url="https://www.jd.com">
+                            用户想购买mac电脑
+                            </boltAction>
+                            
+                            用的的想法:
+                            """
+                            + data);
+
+                    XmlParser.ActionItem v = XmlParser.parser0(actionRes).get(0);
+                    log.info("{}", v);
+
+                    if (v.getType().equals("shopping")) {
+                        data = "shopping";
+                        this.itemName = v.getSubType();
+                    } else {
+                        cmd = "chat";
+                    }
+                }
+
+                //单纯的聊天
+                if (cmd.equals("chat")) {
+                    String chatRes = llm.chat(data);
+                    chatRes = "<action type=\"chat\">" + chatRes + "</action>";
+                    sendMessageToAll(chatRes);
+                    return;
+                }
+
+
                 //购物
                 if (data.equals("shopping") || cmd.equals("shopping")) {
+                    //任务已经完成
+                    if (this.index >= this.messageList.size()) {
+                        sendMessageToAll("""
+                                <action type="end" url="https://www.jd.com/">
+                                </action>
+                                """);
+                        return;
+                    }
+
                     String msg = messageList.get(this.index);
 
 
@@ -258,15 +288,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
                         return;
                     }
 
-                    //结束了
-                    if (this.index == messageList.size()) {
-                        res.addProperty("data", """
-                                <action type="finish" url="https://www.jd.com/">
-                                </action>
-                                """);
-                        this.index = 0;
-                        sendMessageToAll(res.toString());
-                        return;
+                    if (this.index == 1) {
+                        msg = msg + itemName;
                     }
 
                     //要开始处理页面了,都是内容+截图
@@ -284,6 +307,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
                                 }
                                 String t = text.formatted(String.join("\n", messageList), code, msg);
                                 String llmRes = llmService.call(llm, t, img);
+
                                 res.addProperty("data", llmRes);
                                 sendMessageToAll(res.toString());
                             }
