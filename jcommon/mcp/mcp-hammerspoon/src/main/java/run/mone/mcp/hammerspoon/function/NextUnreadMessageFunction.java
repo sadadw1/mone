@@ -78,7 +78,7 @@ public class NextUnreadMessageFunction implements Function<Map<String, Object>, 
                     );
                 }
 
-                Thread.sleep(500);
+                Thread.sleep(1000);
 
                 // 成功切换后，进行截图
                 Request captureRequest = new Request.Builder()
