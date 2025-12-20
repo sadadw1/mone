@@ -21,6 +21,7 @@ import org.springframework.beans.factory.annotation.Value;
 import reactor.core.publisher.Flux;
 
 import java.util.stream.Collectors;
+
 import org.springframework.beans.factory.annotation.Qualifier;
 
 import javax.annotation.PreDestroy;
@@ -195,6 +196,12 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 case "client_response":
                     handleClientResponse(messageMap);
                     break;
+                case "device_info":
+                    handleDeviceInfo(clientId, messageMap);
+                    break;
+                case "heartbeat":
+                    // 忽略心跳消息，不需要处理
+                    break;
                 default:
                     log.warn("Unknown message type: {}", type);
                     sendError(clientId, "Unknown message type: " + type);
@@ -241,6 +248,45 @@ public class WebSocketHandler extends TextWebSocketHandler {
     }
 
     /**
+     * 处理设备信息消息
+     * Android 客户端在连接时发送设备信息，包括屏幕尺寸
+     * <p>
+     * 消息格式:
+     * <pre>
+     * {
+     *     "type": "device_info",
+     *     "clientId": "设备ID",
+     *     "screenWidth": 1080,
+     *     "screenHeight": 2400,
+     *     "device": "设备型号",
+     *     "brand": "品牌",
+     *     ...
+     * }
+     * </pre>
+     */
+    private void handleDeviceInfo(String clientId, Map<String, Object> messageMap) {
+        log.info("Received device info from client {}: {}", clientId, messageMap);
+
+        // 提取屏幕尺寸
+        Object screenWidthObj = messageMap.get("screenWidth");
+        Object screenHeightObj = messageMap.get("screenHeight");
+
+        if (screenWidthObj != null && screenHeightObj != null) {
+            int screenWidth = ((Number) screenWidthObj).intValue();
+            int screenHeight = ((Number) screenHeightObj).intValue();
+
+            // 更新屏幕尺寸缓存
+            ScreenSizeCache.getInstance().updateScreenSize(clientId, screenWidth, screenHeight);
+
+            log.info("Cached screen size for client {}: {}x{}", clientId, screenWidth, screenHeight);
+        } else {
+            log.warn("Device info missing screenWidth or screenHeight for client {}", clientId);
+        }
+
+        // 可以在这里存储其他设备信息（如设备型号、品牌等）供后续使用
+    }
+
+    /**
      * 处理普通消息
      */
     @SuppressWarnings("unchecked")
@@ -274,7 +320,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
     /**
      * 处理图片分析请求
      * 当 cmd=img 时，调用大模型分析图片
-     *
+     * <p>
      * 客户端发送格式:
      * <pre>
      * {
@@ -367,7 +413,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
                                                 return Map.of("x", absoluteX, "y", absoluteY);
                                             })
                                             .toList());
-                                    successResponse.put("result",successResponse.get("result")+"\n"+successResponse.get("points"));
+                                    successResponse.put("result", successResponse.get("result") + "\n" + successResponse.get("points"));
                                     log.info("Parsed {} click points from result (normalized to {}x{})",
                                             points.size(), screenWidth, screenHeight);
                                 }
@@ -494,6 +540,7 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
     /**
      * 处理 Agent 消息请求
+     * 汇集所有 Agent 返回的结果，然后一次性返回给客户端
      */
     private void handleAgentMessage(String clientId, Map<String, Object> messageMap) {
         try {
@@ -509,6 +556,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
             String agentId = data.containsKey("agentId") ?
                     (String) data.get("agentId") : "";
 
+            String androidId = data.containsKey("androidId") ? (String) data.get("androidId") : "";
+
             log.info("Processing agent message for client {}: content={}, userId={}, agentId={}",
                     clientId, content, userId, agentId);
 
@@ -517,21 +566,25 @@ public class WebSocketHandler extends TextWebSocketHandler {
                     .content(content)
                     .role("user")
                     .sentFrom("ws_" + clientId)
-                    .clientId(clientId)
+                    .clientId(androidId)
                     .userId(userId)
                     .agentId(agentId)
                     .createTime(System.currentTimeMillis())
+                    //每次清空记录
+                    .clearHistory(true)
                     .build();
 
-            // 调用 RoleService.receiveMsg 并订阅响应
+            // 调用 RoleService.receiveMsg，汇集所有结果后一次性返回
             roleService.receiveMsg(message)
+                    .collect(Collectors.joining())
                     .subscribe(
-                            response -> {
-                                // Agent 返回的每个消息片段
-                                log.debug("Agent response for client {}: {}", clientId, response);
+                            aggregatedResult -> {
+                                // 汇集所有结果后一次性返回
+                                log.info("Agent processing completed for client: {}, result length: {}",
+                                        clientId, aggregatedResult.length());
                                 Map<String, Object> responseMessage = Map.of(
                                         "type", "agent_response",
-                                        "data", response,
+                                        "data", aggregatedResult,
                                         "timestamp", System.currentTimeMillis()
                                 );
                                 sendMessage(clientId, responseMessage);
@@ -541,20 +594,10 @@ public class WebSocketHandler extends TextWebSocketHandler {
                                 log.error("Agent error for client: {}", clientId, error);
                                 Map<String, Object> errorMessage = Map.of(
                                         "type", "agent_error",
-                                        "error", error.getMessage(),
+                                        "error", error.getMessage() != null ? error.getMessage() : "Unknown error",
                                         "timestamp", System.currentTimeMillis()
                                 );
                                 sendMessage(clientId, errorMessage);
-                            },
-                            () -> {
-                                // 完成处理
-                                log.info("Agent processing completed for client: {}", clientId);
-                                Map<String, Object> completeMessage = Map.of(
-                                        "type", "agent_complete",
-                                        "message", "Agent processing completed",
-                                        "timestamp", System.currentTimeMillis()
-                                );
-                                sendMessage(clientId, completeMessage);
                             }
                     );
 
