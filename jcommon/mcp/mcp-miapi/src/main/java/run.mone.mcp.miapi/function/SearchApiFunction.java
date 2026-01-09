@@ -74,7 +74,7 @@ public class SearchApiFunction implements McpFunction {
             userMap.put("protocol", protocol);
             userMap.put("userName", Optional.ofNullable((String) arguments.get(Const.TOKEN_USERNAME)).orElse(""));
             String resultText = httpUtils.request("/mtop/miapi/getApiList", userMap, Map.class);
-            resultText = String.format("查询到的接口信息为: %s", resultText);
+            resultText = String.format("查询结果为: %s", resultText);
             return Flux.just(new McpSchema.CallToolResult(
                     List.of(new McpSchema.TextContent(resultText)),
                     false
@@ -101,6 +101,7 @@ public class SearchApiFunction implements McpFunction {
                 如：帮我查询dubbo的user接口。
                 如：帮我查询http的user接口。
                 如：帮我查询userinfo接口。
+                返回结果说明：如果搜索接口返回的结果为空，则分为两种情况，一是在当前用户有权限的项目中没有搜索到接口信息，二是用户没有该接口对应项目的权限，所以无法展示。
                 """;
     }
 

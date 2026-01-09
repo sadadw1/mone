@@ -1,6 +1,7 @@
 package run.mone.mcp.miapi.function;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
@@ -14,11 +15,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
-public class IndexDetailFunction implements McpFunction {
+public class SearchProjectUsers implements McpFunction {
 
     @Autowired
     private HttpUtils httpUtils;
@@ -26,22 +26,19 @@ public class IndexDetailFunction implements McpFunction {
             {
                 "type": "object",
                 "properties": {
-                    "indexName": {
+                    "projectId": {
                         "type": "string",
-                        "description": "集合名称（非必填）"
-                    },
-                    "indexId": {
-                        "type": "string",
-                        "description": "集合id（非必填）"
+                        "description": "miapi项目id"
                     }
-                }
+                },
+                "required": ["projectId"]
             }
             """;
 
     private static final String BASE_URL = System.getenv("gateway_host");
 
     @Override
-    @ReportCallCount(businessName = "miapi-api-query_index_detail", description = "查询接口集合详情")
+    @ReportCallCount(businessName = "miapi-api-query_project_users", description = "查询miapi项目成员")
     public Flux<McpSchema.CallToolResult> apply(Map<String, Object> arguments) {
         log.info("miapi mcp arguments: {}", arguments);
         try {
@@ -52,16 +49,26 @@ public class IndexDetailFunction implements McpFunction {
                 ));
             }
 
+            // 验证必填参数
+            Object projectId = arguments.get("projectId");
+
+            if (projectId == null || StringUtils.isBlank(projectId.toString())) {
+                return Flux.just(new McpSchema.CallToolResult(
+                        List.of(new McpSchema.TextContent("错误：缺少必填参数'projectId'")),
+                        true
+                ));
+            }
+
             Map<String, Object> userMap = new HashMap<>();
-            userMap.put("indexName", arguments.get("indexName"));
-            userMap.put("indexId", arguments.get("indexId"));
+            userMap.put("projectId", projectId);
             userMap.put("userName", Optional.ofNullable((String) arguments.get(Const.TOKEN_USERNAME)).orElse(""));
-            String resultText = httpUtils.request("/mtop/miapi/getIndexDetail", userMap, List.class);
+            String resultText = httpUtils.request("/mtop/miapi/searchProjectMembers", userMap, String.class);
             resultText = String.format("查询结果为: %s", resultText);
             return Flux.just(new McpSchema.CallToolResult(
                     List.of(new McpSchema.TextContent(resultText)),
                     false
             ));
+
         } catch (Exception e) {
             log.error("执行miapi操作时发生异常", e);
             return Flux.just(new McpSchema.CallToolResult(
@@ -73,17 +80,14 @@ public class IndexDetailFunction implements McpFunction {
 
     @Override
     public String getName() {
-        return "query_index_detail";
+        return "query_project_users";
     }
 
     @Override
     public String getDesc() {
         return """
-                根据集合名称或集合id或用户名查询集合详情。
-                如：帮我查询我有权限的接口集合。
-                如：帮我查询userIndex集合。
-                如：帮我查询indexId为265的集合。
-                工具说明：搜索集合时必须有该集合所在项目的权限，否则搜索为空。
+                根据miapi平台中的项目id查询该项目成员信息。
+                如果用户直接输入的是项目名， 则先调用query_project工具进行项目查询操作。
                 """;
     }
 
